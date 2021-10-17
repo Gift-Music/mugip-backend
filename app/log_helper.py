@@ -1,6 +1,7 @@
 import logging
 import logging.handlers
 import sys
+
 from app.config_proxy import config
 
 LOGGING_FORMAT = (

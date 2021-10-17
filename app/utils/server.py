@@ -1,15 +1,10 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Dict, Literal, Optional, get_type_hints
+from typing import Any, Callable, Dict, Literal, Optional, get_type_hints
 
-from fastapi import APIRouter, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter
 from pydantic import BaseModel
-
-if TYPE_CHECKING:
-    from starlette.types import ASGIApp, Message, Receive, Scope, Send
-
 
 logger = logging.getLogger(__name__)
 

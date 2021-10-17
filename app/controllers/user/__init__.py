@@ -1,6 +1,6 @@
 import fastapi
 
-from app.utils.fastapi import FASTAPI_RESPONSES
+from app.utils.server import FASTAPI_RESPONSES
 
 __all__ = ['subapp']
 

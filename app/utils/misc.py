@@ -9,6 +9,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, NamedTuple
 
+from elasticsearch._async.client import AsyncElasticsearch
 from fastapi import Request
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import expression as sql_exp
@@ -75,6 +76,10 @@ async def get_db_session(request: Request) -> AsyncIterator[Session]:
 
 def get_redis(request: Request) -> Redis:
     return request.app.extra['redis']  # type: ignore
+
+
+def get_es(request: Request) -> AsyncElasticsearch:
+    return request.app.extra['es']  # type: ignore
 
 
 def get_client_ip(request: Request) -> str:

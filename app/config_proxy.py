@@ -1,18 +1,18 @@
+from __future__ import annotations
+
 import hashlib
 import os
 import sys
 from functools import cached_property
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import msgpack
 from pydantic import BaseModel
 
-from configs.example import ELASTICSEARCH_CONNECT_URI
-
 __all__ = ['config']
 
 
-ConfigValueType = None | bool | int | float | str | bytes
+ConfigValueType = Union[bool, int, float, str, bytes, None]
 
 
 def load_config(config_path: str = 'configs/default.py') -> dict[str, ConfigValueType]:

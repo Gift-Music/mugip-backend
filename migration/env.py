@@ -6,7 +6,7 @@ from alembic.operations import ops
 from sqlalchemy import engine_from_config, pool
 
 config = context.config
-fileConfig(config.config_file_name)
+fileConfig(config.config_file_name)  # type: ignore
 
 import os  # isort: skip # noqa: E402
 import sys  # isort: skip # noqa: E402
@@ -20,7 +20,7 @@ from app.models import ModelBase  # isort:skip # noqa: E402
 target_metadata = ModelBase.metadata
 
 
-def include_object(obj, name, type_, reflected, compare_to):
+def include_object(obj, name, type_, reflected, compare_to):  # type: ignore
     return True
 
 
@@ -28,7 +28,7 @@ writer = rewriter.Rewriter()
 
 
 @writer.rewrites(ops.AddColumnOp)
-def add_column(context, revision, op):
+def add_column(context, revision, op):  # type: ignore
     if op.column.nullable:
         return op
     else:
@@ -44,7 +44,7 @@ def add_column(context, revision, op):
         ]
 
 
-def run_migrations_offline():
+def run_migrations_offline():  # type: ignore
     '''
     Run migrations in 'offline' mode.
 
@@ -70,7 +70,7 @@ def run_migrations_offline():
         context.run_migrations()
 
 
-def run_migrations_online():
+def run_migrations_online():  # type: ignore
     '''
     Run migrations in 'online' mode.
 

@@ -1,20 +1,17 @@
-import asyncio
 import logging
-from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
 import fastapi
+from elasticsearch import AsyncElasticsearch
 from fastapi.middleware.cors import CORSMiddleware
 from redis import BlockingConnectionPool as RedisBlockingConnectionPool
 from redis import Redis
 from sqlalchemy import create_engine
-from elasticsearch_dsl import connections
 
 from .config_proxy import config
 from .controllers import SUBAPP_LIST
 from .controllers.index_ import router as index__router
 from .log_helper import init_logger
-
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
@@ -59,11 +56,6 @@ class Server:
         self.db_engine: Engine | None = None
 
     def _web_app_startup(self) -> None:
-        if config.THREAD_POOL_SIZE is not None:
-            loop = asyncio.get_event_loop()
-            # NOTE : this is only applicable for `starlette <= 0.14.2`
-            loop.set_default_executor(ThreadPoolExecutor(config.THREAD_POOL_SIZE))
-
         self.db_engine = create_engine(config.DATABASE_URI, **config.DATABASE_OPTIONS)
 
         self.redis = Redis(
@@ -73,7 +65,7 @@ class Server:
             )
         )
 
-        self.es = connections.create_connection(hosts=[config.ELASTICSEARCH_CONNECT_URI])
+        self.es = AsyncElasticsearch(hosts=[config.ELASTICSEARCH_CONNECT_URI])
 
         for _, subapp in SUBAPP_LIST + [('/', self.web_app)]:
             if not isinstance(subapp, fastapi.FastAPI):
@@ -83,13 +75,12 @@ class Server:
             subapp.extra['redis'] = self.redis
             subapp.extra['es'] = self.es
 
-
     def _web_app_shutdown(self) -> None:
         if self.db_engine is not None:
             self.db_engine.dispose()
 
         if self.redis is not None:
             self.redis.connection_pool.disconnect()
-        
+
         if self.es is not None:
             self.es.close()
