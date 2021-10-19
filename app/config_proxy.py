@@ -46,6 +46,7 @@ def load_config(config_path: str = 'configs/default.py') -> dict[str, ConfigValu
 
 
 class ConfigTemplate(BaseModel):
+    HOST_NAME: str
     LOGGING_DEBUG_LEVEL: bool
 
     DEBUG_ALLOW_CORS_ALL_ORIGIN: bool

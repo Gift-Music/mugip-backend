@@ -8,9 +8,10 @@ from redis import BlockingConnectionPool as RedisBlockingConnectionPool
 from redis import Redis
 from sqlalchemy import create_engine
 
+from app.utils.server import FASTAPI_RESPONSES, ErrorReportAndForgetMiddleware
+
 from .config_proxy import config
-from .controllers import SUBAPP_LIST
-from .controllers.index_ import router as index__router
+from .controllers import ALL_ROUTERS
 from .log_helper import init_logger
 
 if TYPE_CHECKING:
@@ -36,6 +37,7 @@ class Server:
         self.web_app = fastapi.FastAPI(
             on_startup=[self._web_app_startup],
             on_shutdown=[self._web_app_shutdown],
+            responses=FASTAPI_RESPONSES,
         )
 
         if config.DEBUG_ALLOW_CORS_ALL_ORIGIN:
@@ -48,10 +50,10 @@ class Server:
                 expose_headers=['x-total'],
             )
 
-        self.web_app.include_router(index__router)
+        self.web_app.add_middleware(ErrorReportAndForgetMiddleware)
 
-        for mountpoint, subapp in SUBAPP_LIST:
-            self.web_app.mount(mountpoint, subapp)
+        for router in ALL_ROUTERS:
+            self.web_app.include_router(router)
 
         self.db_engine: Engine | None = None
 
@@ -67,13 +69,9 @@ class Server:
 
         self.es = AsyncElasticsearch(hosts=[config.ELASTICSEARCH_CONNECT_URI])
 
-        for _, subapp in SUBAPP_LIST + [('/', self.web_app)]:
-            if not isinstance(subapp, fastapi.FastAPI):
-                continue
-
-            subapp.extra['db_engine'] = self.db_engine
-            subapp.extra['redis'] = self.redis
-            subapp.extra['es'] = self.es
+        self.web_app.extra['db_engine'] = self.db_engine
+        self.web_app.extra['redis'] = self.redis
+        self.web_app.extra['es'] = self.es
 
     def _web_app_shutdown(self) -> None:
         if self.db_engine is not None:

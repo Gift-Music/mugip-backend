@@ -10,6 +10,7 @@ fileConfig(config.config_file_name)  # type: ignore
 
 import os  # isort: skip # noqa: E402
 import sys  # isort: skip # noqa: E402
+
 sys.path.append(os.getcwd())
 
 from app.config_proxy import config as app_config  # isort:skip # noqa: E402
@@ -17,6 +18,7 @@ from app.config_proxy import config as app_config  # isort:skip # noqa: E402
 config.set_main_option('sqlalchemy.url', app_config.DATABASE_URI)
 
 from app.models import ModelBase  # isort:skip # noqa: E402
+
 target_metadata = ModelBase.metadata
 
 
@@ -40,7 +42,7 @@ def add_column(context, revision, op):  # type: ignore
                 op.column.name,
                 modify_nullable=False,
                 existing_type=op.column.type,
-            )
+            ),
         ]
 
 
@@ -63,7 +65,7 @@ def run_migrations_offline():  # type: ignore
         include_object=include_object,
         literal_binds=True,
         compare_server_default=True,
-        compare_type=True
+        compare_type=True,
     )
 
     with context.begin_transaction():
@@ -80,7 +82,8 @@ def run_migrations_online():  # type: ignore
     connectable = engine_from_config(
         config.get_section(config.config_ini_section),
         prefix='sqlalchemy.',
-        poolclass=pool.NullPool)
+        poolclass=pool.NullPool,
+    )
 
     with connectable.connect() as connection:
         context.configure(
@@ -90,7 +93,7 @@ def run_migrations_online():  # type: ignore
             sqlalchemy_module_prefix='sa.',
             process_revision_directives=writer,
             compare_server_default=True,
-            compare_type=True
+            compare_type=True,
         )
 
         with context.begin_transaction():

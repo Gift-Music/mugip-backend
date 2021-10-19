@@ -4,7 +4,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.schema import Column
 from sqlalchemy.sql import expression as sql_exp
 from sqlalchemy.sql import sqltypes
-from sqlalchemy.sql.schema import UniqueConstraint
+from sqlalchemy.sql.schema import ForeignKey, UniqueConstraint
 
 from ._base import ModelBase
 
@@ -15,14 +15,13 @@ class UserModel(ModelBase):
     id = Column(sqltypes.Integer, primary_key=True)
 
     email = Column(sqltypes.String, unique=True, nullable=False)
-    password = Column(sqltypes.String, nullable=False)
+    password = Column(sqltypes.String, nullable=True)
 
     user_profiles = relationship(
         'UserProfileModel',
         uselist=True,
         back_populates='user',
         cascade='all',
-        primaryjoin='foreign(UserModel.id) == UserProfileModel.user_id',
     )
 
     user_oauth_logins = relationship(
@@ -30,14 +29,13 @@ class UserModel(ModelBase):
         uselist=True,
         back_populates='user',
         cascade='all',
-        primaryjoin='foreign(UserModel.id) == UserOauthLoginRelation.user_id',
     )
 
     user_friends = relationship(
         'UserFriendsRelation',
         uselist=True,
+        back_populates='request_user',
         cascade='all',
-        primaryjoin='foreign(UserModel.id) == UserFriendsRelation.requester_id',
     )
 
 
@@ -46,18 +44,16 @@ class UserProfileModel(ModelBase):
 
     id = Column(sqltypes.Integer, primary_key=True)
 
-    user_id = Column(sqltypes.Integer, nullable=False)
-    user = relationship(
-        'UserModel',
-        uselist=False,
-        primaryjoin='foreign(UserProfileModel.user_id) == UserModel.id',
-    )
+    user_id = Column(sqltypes.Integer, ForeignKey(UserModel.id), nullable=False, index=True)
+    user = relationship('UserModel', uselist=False)
+
+    nickname = Column(sqltypes.String, nullable=False)
 
     profile_images = relationship(
         'UserProfileImageLogModel',
         uselist=True,
         back_populates='user_profile',
-        primaryjoin='foreign(UserProfileModel.id) == UserProfileImageLogModel.user_profile_id',
+        cascade='all',
     )
 
     last_profile_image_url: sql_orm.ColumnProperty
@@ -70,26 +66,24 @@ class UserProfileImageLogModel(ModelBase):
 
     profile_image_url = Column(sqltypes.String, nullable=False)
 
-    user_profile_id = Column(sqltypes.Integer, nullable=False)
+    user_profile_id = Column(sqltypes.Integer, ForeignKey(UserProfileModel.id), nullable=False, index=True)
+    user_profile = relationship('UserProfileModel', uselist=False)
 
 
 class UserFriendsRelation(ModelBase):
     __tablename__ = 'user_friends_relation'
 
-    requester_id = Column(sqltypes.Integer, nullable=False, primary_key=True)
+    request_user_id = Column(sqltypes.Integer, ForeignKey(UserModel.id), nullable=False, primary_key=True, index=True)
+    request_user = relationship('UserModel', uselist=False)
 
-    acceptor_id = Column(sqltypes.Integer, nullable=False, primary_key=True)
-    acceptor = relationship(
-        'UserModel',
-        uselist=False,
-        primaryjoin='foreign(UserModel.id) == UserFriendsRelation.acceptor_id',
-    )
+    accept_user_id = Column(sqltypes.Integer, nullable=False, primary_key=True)
 
 
 class UserOauthLoginRelation(ModelBase):
     __tablename__ = 'user_oauth_relation'
 
-    user_id = Column(sqltypes.Integer, nullable=False, primary_key=True)
+    user_id = Column(sqltypes.Integer, ForeignKey(UserModel.id), nullable=False, primary_key=True, index=True)
+    user = relationship('UserModel', uselist=False)
 
     uid = Column(sqltypes.String, nullable=False)
     provider_type = Column(sqltypes.Integer, nullable=False, primary_key=True)

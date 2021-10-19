@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, Literal, Optional, get_type_hints
+from typing import TYPE_CHECKING, Any, Callable, Dict, Literal, Optional, get_type_hints
 
-from fastapi import APIRouter
+from fastapi import APIRouter, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +70,51 @@ FASTAPI_RESPONSES: dict[int | str, dict[str, Any]] = {
         'model': _ServerErrorResponseModel,
     }
 }
+
+
+class ErrorReportAndForgetMiddleware:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        response_started = False
+
+        async def _send(message: Message) -> None:
+            nonlocal response_started
+
+            if message['type'] == 'http.response.start':
+                response_started = True
+
+            await send(message)
+
+        try:
+            await self.app(scope, receive, _send)
+            return
+
+        except AuthError as err:
+            err_response = JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content=_ErrorResponseModel.from_exc(err).dict()
+            )
+        except LogicError as err:
+            err_response = JSONResponse(
+                status_code=status.HTTP_409_CONFLICT,
+                content=_ErrorResponseModel.from_exc(err).dict()
+            )
+        except Exception:
+            logger.exception('Internal server error')
+
+            err_response = JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={
+                    'code': 'server_error',
+                    'message': 'unexpected server error',
+                    'detail': None,
+                }
+            )
+
+        if not response_started:
+            await err_response(scope, receive, send)
 
 
 class CustomAPIRouter(APIRouter):

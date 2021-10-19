@@ -82,15 +82,6 @@ def get_es(request: Request) -> AsyncElasticsearch:
     return request.app.extra['es']  # type: ignore
 
 
-def get_client_ip(request: Request) -> str:
-    x_forwarded_for = request.headers.get('X-FORWARDED-FOR')
-    return (  # type: ignore
-        (x_forwarded_for.split(',')[0]).split(':')[0]
-        if x_forwarded_for
-        else request.client.host
-    )
-
-
 def _filter_expr_to_query(
     filter_expr: dict[str, Any],
     key_func_dict: dict[str, Callable[[Any], BooleanClauseList]]

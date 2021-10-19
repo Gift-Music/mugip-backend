@@ -28,6 +28,7 @@ install_requires = [
     'starlette==0.16.0',
     'uvicorn[standard]==0.15.0',
     'uvloop==0.16.0',
+    'elasticsearch[async]==7.15.1',
     'elasticsearch-dsl==7.4.0',
 ]
 

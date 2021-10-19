@@ -1,5 +1,3 @@
-
-
 from typing import Any
 from urllib.parse import urlencode
 
@@ -18,6 +16,8 @@ def _uri_builder(
     options_str = urlencode(options or {})
     return f'{scheme}://{auth}{host}{port_str}/{path}?{options_str}'
 
+
+HOST_NAME: str = 'localhost'
 
 LOGGING_DEBUG_LEVEL: bool = True
 
@@ -48,7 +48,7 @@ DATABASE_OPTIONS: dict[str, Any] = {
 REDIS_CONNECT_URI: str = _uri_builder(
     'redis',
     host='127.0.0.1',
-    port=25100,
+    port=35100,
     path='0',  # DB number
     options={},
 )
@@ -67,4 +67,3 @@ ELASTICSEARCH_CONNECT_URI: str = _uri_builder(
 )
 
 REDIS_KEY_PREFIX: str = 'dev:mugip:'  # Warning! Do not share with production server
-
