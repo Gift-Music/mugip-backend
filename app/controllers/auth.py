@@ -1,5 +1,3 @@
-from typing import Optional
-
 from fastapi import Depends
 from pydantic import BaseModel, EmailStr, Field, SecretStr
 from redis import Redis
@@ -66,10 +64,20 @@ def _signup_api(
         )
 
     user = m.UserModel(email=q.email)
+    db_session.add(user)
+
     if isinstance(q, _AuthSignupRequest):
         user.password = generate_hashed_password(q.password.get_secret_value())
 
-    db_session.add(user)
+    elif isinstance(q, _AuthSignupOauthRequest):
+        db_session.flush()
+        oauth_login = m.UserOauthLoginRelation(
+            user=user,
+            uid=q.oauth_uid,
+            provider_type=q.provider_type,
+        )
+        db_session.add(oauth_login)
+
     db_session.commit()
 
     return _AuthSignupResponse(user_id=user.id)
