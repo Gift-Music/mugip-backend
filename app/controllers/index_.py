@@ -1,11 +1,11 @@
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
-from redis import Redis
 from sqlalchemy.orm import Session
 
-from app.utils.misc import get_db_session, get_redis
+from app.context import AppContext
+from app.utils.fastapi import get_db_session
 
 logger = logging.getLogger(__name__)
 
@@ -14,14 +14,16 @@ router = APIRouter()
 
 @router.get('/_ping', include_in_schema=False)
 def ping_get_api(
+    request: Request,
     db_session: Session = Depends(get_db_session),
-    redis: Redis = Depends(get_redis),
 ) -> JSONResponse:
+    app_context = AppContext.from_app(request.app)
+
     try:
         if db_session.execute('SELECT 1').scalar() != 1:
             raise RuntimeError('postgresql ping failure')
 
-        if not redis.ping():
+        if not app_context.redis.ping():
             raise RuntimeError('redis ping failure')
 
     except Exception:

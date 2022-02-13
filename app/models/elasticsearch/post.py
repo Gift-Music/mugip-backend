@@ -1,6 +1,6 @@
 from elasticsearch_dsl import GeoPoint, InnerDoc, Integer, Nested, Text
 
-from ._base import DEFAULT_TEXT_FIELDS, DocumnetBase
+from .base_ import DEFAULT_TEXT_FIELDS, DocumnetBase
 
 
 class Music(InnerDoc):

@@ -1,6 +1,6 @@
 from elasticsearch_dsl import Integer, Text
 
-from ._base import DEFAULT_TEXT_FIELDS, DocumnetBase
+from .base_ import DEFAULT_TEXT_FIELDS, DocumnetBase
 
 
 class Music(DocumnetBase):

@@ -1,37 +1,128 @@
 from __future__ import annotations
 
+import binascii
+import dataclasses
 import datetime
+import hashlib
+import os
 import random
 import string
+from typing import Any
 
 import jwt
-import msgpack
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
-from pydantic import BaseModel
-from redis import Redis
 
-from app.config_proxy import config
 from app.constants import TZ_UTC
-from app.utils import server as server_utils
-from app.utils.misc import lazystr
+from app.settings import AppSettings
+from app.utils import fastapi as fastapi_util
+from app.utils.fastapi import get_app_settings
 
-_USER_LOGIN_TTL = 30  # 30 minutes
-_USER_TOKEN_REFESH_TTL = 2  # 2 days
+from .base_ import AppUtilBase
 
-_USER_SESSION_KEY_PREFIX = lazystr(lambda: config.REDIS_KEY_PREFIX + 'session:')
+_PBKDF2_HASH_NAME = 'SHA256'
+_PBKDF2_ITERATIONS = 100_000
 
+_USER_LOGIN_TTL = 24  # 12 hours
+_USER_REFRESH_TTL = 24 * 7  # 7 days
 
-def _make_random_string(length: int) -> str:
-    letters = string.ascii_letters + string.digits
-    return ''.join((random.SystemRandom().choice(letters) for i in range(length)))
-
-
-class AuthResult(BaseModel):
-    user_id: int
+_VERIFY_TOKEN_LENGTH = 6
+_VERIFY_TOKEN_VERIFICATION_TTL = 10 * 60  # 10 minutes
 
 
-user_auth_scheme = OAuth2PasswordBearer(tokenUrl='auth/login/fastapi')
+@dataclasses.dataclass
+class AuthUtilError(Exception):
+    code: str
+    message: str
+    detail: dict[str, Any] | None = None
+
+
+def generate_random_token(length: int) -> str:
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
+
+
+def generate_hashed_password(password: str) -> str:
+    pbkdf2_salt = os.urandom(16)
+    pw_hash = hashlib.pbkdf2_hmac(
+        _PBKDF2_HASH_NAME,
+        password.encode('utf-8'),
+        pbkdf2_salt,
+        _PBKDF2_ITERATIONS,
+    )
+
+    return '%s:%s' % (
+        binascii.hexlify(pbkdf2_salt).decode('utf-8'),
+        binascii.hexlify(pw_hash).decode('utf-8'),
+    )
+
+
+def validate_hashed_password(password: str, hashed_password: str) -> bool:
+    pbkdf2_salt_hex, pw_hash_hex = hashed_password.split(':')
+
+    pw_challenge = hashlib.pbkdf2_hmac(
+        _PBKDF2_HASH_NAME,
+        password.encode('utf-8'),
+        binascii.unhexlify(pbkdf2_salt_hex),
+        _PBKDF2_ITERATIONS,
+    )
+
+    return pw_challenge == binascii.unhexlify(pw_hash_hex)
+
+
+class AuthAppUtil(AppUtilBase):
+    @property
+    def redis_keyspace(self) -> str:
+        return self.app_settings.REDIS_KEY_PREFIX + 'auth:'
+
+    def generate_token(self, user_id: int) -> tuple[str, str]:
+        access_token = jwt.encode(
+            payload={
+                'user_id': user_id,
+                'iss': 'mugip',
+                'exp': (
+                    datetime.datetime.now(TZ_UTC) + datetime.timedelta(hours=_USER_LOGIN_TTL)
+                ).timestamp(),
+            },
+            key=self.app_settings.SECRET_KEY,
+            algorithm='HS256',
+        )
+
+        refresh_token = jwt.encode(
+            payload={
+                'user_id': user_id,
+                'iss': 'mugip',
+                'exp': (
+                    datetime.datetime.now(TZ_UTC) + datetime.timedelta(hours=_USER_REFRESH_TTL)
+                ).timestamp(),
+            },
+            key=self.app_settings.SECRET_KEY,
+            algorithm='HS256',
+        )
+
+        # Redis 에 생성된 token 추가
+        self.app_context.redis.set(f'{self.redis_keyspace}{user_id}', access_token)
+        return access_token, refresh_token
+
+    def issue_verify_token(self, email: str) -> str:
+        token = generate_random_token(_VERIFY_TOKEN_LENGTH)
+        self.app_context.redis.set(
+            f'{self.redis_keyspace}verify:{token}',
+            email,
+            ex=_VERIFY_TOKEN_VERIFICATION_TTL,
+        )
+        return token
+
+    def get_verify_token(self, token: str) -> str | None:
+        email_bytes: bytes | None = self.app_context.redis.get(f'{self.redis_keyspace}verify:{token}')
+        return email_bytes.decode() if email_bytes is not None else None
+
+    def delete_verify_token(self, token: str) -> None:
+        self.app_context.redis.delete(f'{self.redis_keyspace}verify:{token}')
+
+
+user_auth_scheme = OAuth2PasswordBearer(
+    tokenUrl='auth/login/oauth',
+)
 
 
 class _AuthFailedError(Exception):
@@ -39,15 +130,16 @@ class _AuthFailedError(Exception):
         self.code = code
 
 
-def user_auth_required(
+async def user_auth_required(
     token: str = Depends(user_auth_scheme),
-) -> AuthResult:
+    app_settings: AppSettings = Depends(get_app_settings),
+) -> int:
     try:
         try:
             token_info = jwt.decode(
                 jwt=token,
-                key=config.SECRET_KEY,
-                algorithms=['HS256'],
+                key=app_settings.SECRET_KEY,
+                algorithms=['HS256']
             )
         except jwt.ExpiredSignatureError:
             raise _AuthFailedError('token_is_expired')
@@ -55,46 +147,12 @@ def user_auth_required(
             raise _AuthFailedError('token_decode_failure')
 
         user_id = token_info.get('user_id')
-
         if not isinstance(user_id, int):
             raise _AuthFailedError('invalid_token_structure')
 
     except _AuthFailedError as err:
-        raise server_utils.AuthError(err.code, 'you have no permission')
+        raise fastapi_util.AuthError(err.code, 'you have no permission')
     except Exception:
-        raise server_utils.AuthError('unknown', 'you have no permission')
+        raise fastapi_util.AuthError('unknown', 'you have no permission')
 
-    return AuthResult(user_id=user_id)
-
-
-def generate_tokens(user_id: int) -> tuple[str, str]:
-    access_token = jwt.encode(
-        payload={
-            'user_id': user_id,
-            'iss': config.HOST_NAME,
-            'exp': (datetime.datetime.now(TZ_UTC) + datetime.timedelta(hours=_USER_LOGIN_TTL)).timestamp(),
-        },
-        key=config.SECRET_KEY,
-        algorithm='HS256',
-    )
-
-    refresh_token = jwt.encode(
-        payload={
-            'user_id': user_id,
-            'iss': config.HOST_NAME,
-            'exp': (datetime.datetime.now(TZ_UTC) + datetime.timedelta(days=_USER_TOKEN_REFESH_TTL)).timestamp(),
-        },
-        key=config.SECRET_KEY,
-        algorithm='HS256',
-    )
-
-    return access_token, refresh_token
-
-
-def login_user(user_id: int, redis: Redis) -> None:
-    token_nonce = _make_random_string(10)
-    redis.set(
-        _USER_SESSION_KEY_PREFIX + f'user_id:{user_id}:nonce:{token_nonce}',
-        msgpack.dumps((user_id, None)),
-        ex=_USER_LOGIN_TTL,
-    )
+    return user_id

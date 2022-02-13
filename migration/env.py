@@ -1,3 +1,5 @@
+import os
+import sys
 from logging.config import fileConfig
 
 from alembic import context
@@ -8,21 +10,24 @@ from sqlalchemy import engine_from_config, pool
 config = context.config
 fileConfig(config.config_file_name)  # type: ignore
 
-import os  # isort: skip # noqa: E402
-import sys  # isort: skip # noqa: E402
 
 sys.path.append(os.getcwd())
 
-from app.config_proxy import config as app_config  # isort:skip # noqa: E402
 
-config.set_main_option('sqlalchemy.url', app_config.DATABASE_URI)
+def _app_init():  # type: ignore
+    from app.models.postgres import ModelBase
+    from app.settings import AppSettings
 
-from app.models import ModelBase  # isort:skip # noqa: E402
+    app_settings = AppSettings()
 
-target_metadata = ModelBase.metadata
+    config.set_main_option('sqlalchemy.url', app_settings.DATABASE_URI)
+    return ModelBase.metadata
 
 
-def include_object(obj, name, type_, reflected, compare_to):  # type: ignore
+target_metadata = _app_init()
+
+
+def _include_object(obj, name, type_, reflected, compare_to):  # type: ignore
     return True
 
 
@@ -30,7 +35,7 @@ writer = rewriter.Rewriter()
 
 
 @writer.rewrites(ops.AddColumnOp)
-def add_column(context, revision, op):  # type: ignore
+def _(context, revision, op):  # type: ignore
     if op.column.nullable:
         return op
     else:
@@ -41,14 +46,13 @@ def add_column(context, revision, op):  # type: ignore
                 op.table_name,
                 op.column.name,
                 modify_nullable=False,
-                existing_type=op.column.type,
-            ),
+                existing_type=op.column.type
+            )
         ]
 
 
-def run_migrations_offline():  # type: ignore
-    '''
-    Run migrations in 'offline' mode.
+def run_migrations_offline() -> None:
+    '''Run migrations in 'offline' mode.
 
     This configures the context with just a URL
     and not an Engine, though an Engine is acceptable
@@ -62,7 +66,7 @@ def run_migrations_offline():  # type: ignore
     context.configure(
         url=url,
         target_metadata=target_metadata,
-        include_object=include_object,
+        include_object=_include_object,
         literal_binds=True,
         compare_server_default=True,
         compare_type=True,
@@ -72,12 +76,12 @@ def run_migrations_offline():  # type: ignore
         context.run_migrations()
 
 
-def run_migrations_online():  # type: ignore
-    '''
-    Run migrations in 'online' mode.
+def run_migrations_online() -> None:
+    '''Run migrations in 'online' mode.
 
     In this scenario we need to create an Engine
     and associate a connection with the context.
+
     '''
     connectable = engine_from_config(
         config.get_section(config.config_ini_section),
@@ -89,7 +93,7 @@ def run_migrations_online():  # type: ignore
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
-            include_object=include_object,
+            include_object=_include_object,
             sqlalchemy_module_prefix='sa.',
             process_revision_directives=writer,
             compare_server_default=True,

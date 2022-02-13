@@ -6,7 +6,7 @@ from sqlalchemy.sql import expression as sql_exp
 from sqlalchemy.sql import sqltypes
 from sqlalchemy.sql.schema import ForeignKey, UniqueConstraint
 
-from ._base import ModelBase
+from .base_ import ModelBase
 
 
 class UserModel(ModelBase):
@@ -15,6 +15,9 @@ class UserModel(ModelBase):
     id = Column(sqltypes.Integer, primary_key=True)
 
     email = Column(sqltypes.String, unique=True, nullable=False)
+    email_verified_dt = Column(sqltypes.TIMESTAMP(timezone=True), nullable=True)
+
+    nickname = Column(sqltypes.String, nullable=True)
     password = Column(sqltypes.String, nullable=True)
 
     user_profiles = relationship(
@@ -85,8 +88,8 @@ class UserOauthLoginRelation(ModelBase):
     user_id = Column(sqltypes.Integer, ForeignKey(UserModel.id), nullable=False, primary_key=True, index=True)
     user = relationship('UserModel', uselist=False)
 
-    uid = Column(sqltypes.String, nullable=False)
-    provider_type = Column(sqltypes.Integer, nullable=False, primary_key=True)
+    uid = Column(sqltypes.String, nullable=False, primary_key=True)
+    provider_type = Column(sqltypes.Integer, nullable=False)
 
 
 UniqueConstraint(
@@ -105,7 +108,7 @@ UserProfileModel.last_profile_image_url = sql_orm.column_property(
             .where(UserProfileModel.id == UserProfileImageLogModel.user_profile_id)
             .order_by(UserProfileModel.created.desc())
             .limit(1)
-            .as_scalar(),
+            .scalar_subquery(),
             '',
         )
         .label('last_profile_image_url')

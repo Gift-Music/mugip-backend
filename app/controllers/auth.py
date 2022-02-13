@@ -1,55 +1,34 @@
+import sqlalchemy
 from fastapi import Depends
-from pydantic import BaseModel, EmailStr, Field, SecretStr
-from redis import Redis
+from pydantic import BaseModel, EmailStr, SecretStr
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import expression as sql_exp
 
-from app import models as m
-from app.utils import auth as auth_utils
-from app.utils import server as server_utils
-from app.utils.misc import generate_hashed_password, get_db_session, get_redis, validate_hashed_password
+from app.models import postgres as m
+from app.utils import AppUtils
+from app.utils import auth as auth_util
+from app.utils import email as email_util
+from app.utils import fastapi as fastapi_util
+from app.utils import oauth as oauth_util
+from app.utils.fastapi import CustomAPIRouter, get_app_utils, get_db_session
 
-router = server_utils.CustomAPIRouter(prefix='/auth', tags=['auth'])
-
-
-class _AuthSignupRequestBase(BaseModel):
-    email: EmailStr = Field(description='이메일')
-
-
-class _AuthSignupRequest(_AuthSignupRequestBase):
-    password: SecretStr = Field(description='로그인 PW', min_length=8)
+router = CustomAPIRouter(prefix='/auth', tags=['auth'])
 
 
-class _AuthSignupResponse(BaseModel):
-    user_id: int
+class _SignUpRequest(BaseModel):
+    email: EmailStr
+    nickname: str
+    password: SecretStr
+    is_agreed: bool
 
 
 @router.post('/signup')
-def auth_signup_api(
-    q: _AuthSignupRequest,
+def signup_api(
+    q: _SignUpRequest,
+    app_utils: AppUtils = Depends(get_app_utils),
     db_session: Session = Depends(get_db_session),
-) -> _AuthSignupResponse:
-    return _signup_api(q, db_session)
-
-
-class _AuthSignupOauthRequest(_AuthSignupRequestBase):
-    oauth_uid: str
-    provider_type: m.UserOauthProviderTypeEnum
-
-
-@router.post('/signup/oauth')
-def auth_signup_oauth_api(
-    q: _AuthSignupOauthRequest,
-    db_session: Session = Depends(get_db_session),
-) -> _AuthSignupResponse:
-    return _signup_api(q, db_session)
-
-
-def _signup_api(
-    q: _AuthSignupRequestBase,
-    db_session: Session,
-) -> _AuthSignupResponse:
-    is_email_exist: bool = db_session \
+) -> None:
+    is_email_exist = db_session \
         .scalar(
             sql_exp
             .exists()
@@ -58,74 +37,215 @@ def _signup_api(
         )
 
     if is_email_exist:
-        raise server_utils.LogicError(
-            code='email_conflict',
-            message='already signed up email',
+        raise fastapi_util.LogicError(
+            code='already_exist_email',
+            message='already exist email',
         )
 
-    user = m.UserModel(email=q.email)
+    user = m.UserModel(
+        email=q.email,
+        nickname=q.nickname,
+        password=auth_util.generate_hashed_password(q.password.get_secret_value()),
+    )
+
     db_session.add(user)
 
-    if isinstance(q, _AuthSignupRequest):
-        user.password = generate_hashed_password(q.password.get_secret_value())
-
-    elif isinstance(q, _AuthSignupOauthRequest):
+    try:
         db_session.flush()
-        oauth_login = m.UserOauthLoginRelation(
-            user=user,
-            uid=q.oauth_uid,
-            provider_type=q.provider_type,
+    except sqlalchemy.exc.IntegrityError:
+        raise fastapi_util.LogicError(
+            code='try_again',
+            message='there is a race condition. try again.',
         )
-        db_session.add(oauth_login)
 
-    db_session.commit()
+    verify_token = app_utils.auth.issue_verify_token(q.email)
 
-    return _AuthSignupResponse(user_id=user.id)
+    app_utils.email.send_email(
+        email_util.EmailModel(
+            to=q.email,
+            subject='Mugip 인증',
+            message=f'인증번호: {verify_token}',
+        )
+    )
 
 
-class _AuthLoginRequest(BaseModel):
-    email: str = Field(description='이메일')
-    password: SecretStr = Field(description='로그인 PW', min_length=8)
+class _VerifyEmailRequest(BaseModel):
+    email: EmailStr
+    token: str
 
 
-class _AuthLoginResponse(BaseModel):
+class _VerifyEmailResponse(BaseModel):
     access_token: str
     refresh_token: str
 
 
-@router.post('/login')
-def auth_login_api(
-    q: _AuthLoginRequest,
+@router.post('/verify/email')
+def verify_token_api(
+    q: _VerifyEmailRequest,
+    app_utils: AppUtils = Depends(get_app_utils),
     db_session: Session = Depends(get_db_session),
-    redis: Redis = Depends(get_redis)
-) -> _AuthLoginResponse:
+) -> _VerifyEmailResponse:
+    email = app_utils.auth.get_verify_token(q.token)
+
+    if email != q.email:
+        raise fastapi_util.LogicError(
+            code='invalid_token',
+            message='this token is not valid'
+        )
+
+    app_utils.auth.delete_verify_token(q.token)
+
     user = db_session \
         .query(m.UserModel) \
         .filter(m.UserModel.email == q.email) \
         .one_or_none()
 
     if user is None:
-        raise server_utils.LogicError(
-            code='not_found',
-            message='the email is not signed up in server',
+        raise fastapi_util.NotFoundError(
+            code='not_found_user',
+            message='failed to found user by this email',
         )
 
-    if user.password is None:
-        raise server_utils.LogicError(
-            code='no_password',
-            message='the user is not signed up by password',
+    access_token, refresh_token = app_utils.auth.generate_token(user.id)
+
+    return _VerifyEmailResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+    )
+
+
+class _LoginRequest(BaseModel):
+    email: EmailStr
+    password: SecretStr
+
+
+class _LoginResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+
+
+@router.post('/login')
+def login_api(
+    q: _LoginRequest,
+    app_utils: AppUtils = Depends(get_app_utils),
+    db_session: Session = Depends(get_db_session),
+) -> _LoginResponse:
+    user = db_session \
+        .query(m.UserModel) \
+        .filter(m.UserModel.email == q.email) \
+        .one_or_none()
+
+    if user is None:
+        raise fastapi_util.NotFoundError(
+            code='not_found_user',
+            message='failed to found user by this email',
         )
 
-    if not validate_hashed_password(q.password.get_secret_value(), user.password):
-        raise server_utils.LogicError(
-            code='password_not_valid',
-            message='password is not valid',
+    if not auth_util.validate_hashed_password(q.password.get_secret_value(), user.password):
+        raise fastapi_util.LogicError(
+            code='invalid_password',
+            message='this password is not valid'
         )
 
-    auth_utils.login_user(user.id, redis)
-    access_token, refresh_token = auth_utils.generate_tokens(user.id)
+    access_token, refresh_token = app_utils.auth.generate_token(user.id)
 
-    return _AuthLoginResponse(
+    return _LoginResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+    )
+
+
+class _OauthSignUpRequest(BaseModel):
+    email: EmailStr
+    token: str
+    provider_type: oauth_util.ProviderTypeEnum
+
+
+class _OauthSignUpResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+
+
+@router.post('/signup/oauth')
+def oauth_signup_api(
+    q: _OauthSignUpRequest,
+    app_utils: AppUtils = Depends(get_app_utils),
+    db_session: Session = Depends(get_db_session),
+) -> _OauthSignUpResponse:
+    is_email_exist = db_session \
+        .scalar(
+            sql_exp
+            .exists()
+            .where(m.UserModel.email == q.email)
+            .select()
+        )
+
+    if is_email_exist:
+        raise fastapi_util.LogicError(
+            code='already_exist_email',
+            message='already exist email',
+        )
+
+    social_uid = oauth_util.get_social_uid_by_token_n_provider_type(q.token, q.provider_type)
+
+    user = m.UserModel(email=q.email)
+
+    user_oauth_login = m.UserOauthLoginRelation(
+        user=user,
+        uid=social_uid,
+        provider_type=q.provider_type,
+    )
+
+    db_session.add(user)
+    db_session.add(user_oauth_login)
+
+    db_session.commit()
+
+    access_token, refresh_token = app_utils.auth.generate_token(user.id)
+
+    return _OauthSignUpResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+    )
+
+
+class _OauthLoginRequest(BaseModel):
+    email: EmailStr
+    token: str
+    provider_type: oauth_util.ProviderTypeEnum
+
+
+class _OauthLoginResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+
+
+@router.post('/login/oauth')
+def oauth_login_api(
+    q: _OauthLoginRequest,
+    app_utils: AppUtils = Depends(get_app_utils),
+    db_session: Session = Depends(get_db_session),
+) -> _OauthLoginResponse:
+    social_uid = oauth_util.get_social_uid_by_token_n_provider_type(q.token, q.provider_type)
+
+    user = db_session \
+        .query(m.UserOauthLoginRelation.user) \
+        .join(m.UserOauthLoginRelation.user) \
+        .filter(
+            (m.UserOauthLoginRelation.uid == social_uid)
+            & (m.UserOauthLoginRelation.provider_type == q.provider_type)
+        ) \
+        .one_or_none()
+
+    if user is None:
+        raise fastapi_util.NotFoundError(
+            code='not_found_user',
+            message='failed to found user by this email',
+        )
+
+    access_token, refresh_token = app_utils.auth.generate_token(user.id)
+
+    return _OauthLoginResponse(
         access_token=access_token,
         refresh_token=refresh_token,
     )

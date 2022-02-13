@@ -2,7 +2,7 @@ import logging
 import logging.handlers
 import sys
 
-from app.config_proxy import config
+from app.settings import AppSettings
 
 LOGGING_FORMAT = (
     '[%(levelname)1.1s '
@@ -14,8 +14,8 @@ LOGGING_FORMAT = (
 )
 
 
-def init_logger(root_logger_name: str) -> logging.Logger:
-    app_logger_level = logging.DEBUG if config.LOGGING_DEBUG_LEVEL else logging.INFO
+def init_logger(root_logger_name: str, app_settings: AppSettings) -> logging.Logger:
+    app_logger_level = logging.DEBUG if app_settings.LOGGING_DEBUG_LEVEL else logging.INFO
 
     app_logger = logging.getLogger(root_logger_name)
     app_logger.setLevel(app_logger_level)

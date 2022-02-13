@@ -4,6 +4,9 @@ all:
 
 .PHONY: update_requirements
 update_requirements:
-	hash pip-compile > /dev/null || (echo "You need to install pip-tools first!" && exit 1)
-	rm requirements.txt > /dev/null 2>&1 || true
-	pip-compile --generate-hashes --no-header -o requirements.txt
+	pip-compile --generate-hashes --no-header -o requirements.txt setup.py
+	pip-compile --no-header -o requirements-dev.txt requirements-dev.in
+
+.PHONY: reset_test_env
+reset_test_env:
+	python scripts/reset_test_env.py
