@@ -3,12 +3,8 @@ from __future__ import annotations
 import dataclasses
 import enum
 import logging
-from typing import Optional
 
-from pydantic import BaseModel
 import httpx
-
-from .base_ import AppUtilBase
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +29,7 @@ class ProviderTypeEnum(enum.IntEnum):
     Kakao = 2
 
 
-def get_social_uid_by_token_n_provider_type(token: str, provider_type: ProviderTypeEnum):
+def get_social_uid_by_token_n_provider_type(token: str, provider_type: ProviderTypeEnum) -> str:
     if provider_type == ProviderTypeEnum.Google:
         return google_me_api(token)
     elif provider_type == ProviderTypeEnum.Kakao:
@@ -90,7 +86,7 @@ def google_me_api(google_token: str) -> str:
 
 
 def _kakao_uri_builder(endpoint: str) -> str:
-    uri = '{}/{}{}?{}'.format(
+    uri = '{}/{}/{}'.format(
         KAKAO_API_BASE_URL, KAKAO_API_VERSION, endpoint
     )
     return uri

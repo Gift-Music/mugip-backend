@@ -20,13 +20,6 @@ class UserModel(ModelBase):
     nickname = Column(sqltypes.String, nullable=True)
     password = Column(sqltypes.String, nullable=True)
 
-    user_profiles = relationship(
-        'UserProfileModel',
-        uselist=True,
-        back_populates='user',
-        cascade='all',
-    )
-
     user_oauth_logins = relationship(
         'UserOauthLoginRelation',
         uselist=True,
@@ -34,28 +27,24 @@ class UserModel(ModelBase):
         cascade='all',
     )
 
-    user_friends = relationship(
-        'UserFriendsRelation',
+    followers = relationship(
+        'UserFollowRelation',
+        uselist=True,
+        back_populates='target_user',
+        cascade='all',
+    )
+
+    followings = relationship(
+        'UserFollowRelation',
         uselist=True,
         back_populates='request_user',
         cascade='all',
     )
 
-
-class UserProfileModel(ModelBase):
-    __tablename__ = 'user_profile_model'
-
-    id = Column(sqltypes.Integer, primary_key=True)
-
-    user_id = Column(sqltypes.Integer, ForeignKey(UserModel.id), nullable=False, index=True)
-    user = relationship('UserModel', uselist=False)
-
-    nickname = Column(sqltypes.String, nullable=False)
-
     profile_images = relationship(
         'UserProfileImageLogModel',
         uselist=True,
-        back_populates='user_profile',
+        back_populates='user',
         cascade='all',
     )
 
@@ -69,17 +58,18 @@ class UserProfileImageLogModel(ModelBase):
 
     profile_image_url = Column(sqltypes.String, nullable=False)
 
-    user_profile_id = Column(sqltypes.Integer, ForeignKey(UserProfileModel.id), nullable=False, index=True)
-    user_profile = relationship('UserProfileModel', uselist=False)
+    user_id = Column(sqltypes.Integer, ForeignKey(UserModel.id), nullable=False, index=True)
+    user = relationship('UserModel', uselist=False)
 
 
-class UserFriendsRelation(ModelBase):
-    __tablename__ = 'user_friends_relation'
+class UserFollowRelation(ModelBase):
+    __tablename__ = 'user_follow_relation'
 
     request_user_id = Column(sqltypes.Integer, ForeignKey(UserModel.id), nullable=False, primary_key=True, index=True)
     request_user = relationship('UserModel', uselist=False)
 
-    accept_user_id = Column(sqltypes.Integer, nullable=False, primary_key=True)
+    target_user_id = Column(sqltypes.Integer, nullable=False, primary_key=True)
+    target_user = relationship('UserModel', uselist=False)
 
 
 class UserOauthLoginRelation(ModelBase):
@@ -98,15 +88,15 @@ UniqueConstraint(
 )
 
 
-UserProfileModel.last_profile_image_url = sql_orm.column_property(
+UserModel.last_profile_image_url = sql_orm.column_property(
     (
         sql_func
         .coalesce(
             sql_exp
             .select([UserProfileImageLogModel.profile_image_url])
             .correlate_except(UserProfileImageLogModel)  # type: ignore
-            .where(UserProfileModel.id == UserProfileImageLogModel.user_profile_id)
-            .order_by(UserProfileModel.created.desc())
+            .where(UserModel.id == UserProfileImageLogModel.user_id)
+            .order_by(UserModel.created.desc())
             .limit(1)
             .scalar_subquery(),
             '',

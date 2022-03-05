@@ -12,11 +12,14 @@ from typing import Any
 import jwt
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.orm import Session
+from sqlalchemy.sql import expression as sql_exp
 
+import app.models.postgres as m
 from app.constants import TZ_UTC
 from app.settings import AppSettings
 from app.utils import fastapi as fastapi_util
-from app.utils.fastapi import get_app_settings
+from app.utils.fastapi import get_app_settings, get_db_session
 
 from .base_ import AppUtilBase
 
@@ -133,6 +136,7 @@ class _AuthFailedError(Exception):
 async def user_auth_required(
     token: str = Depends(user_auth_scheme),
     app_settings: AppSettings = Depends(get_app_settings),
+    db_session: Session = Depends(get_db_session),
 ) -> int:
     try:
         try:
@@ -149,6 +153,14 @@ async def user_auth_required(
         user_id = token_info.get('user_id')
         if not isinstance(user_id, int):
             raise _AuthFailedError('invalid_token_structure')
+
+        is_user_exist: bool = db_session.scalar(
+            sql_exp
+            .exists()
+            .where(m.UserModel.id == user_id)
+        )
+        if not is_user_exist:
+            raise _AuthFailedError('user_deleted')
 
     except _AuthFailedError as err:
         raise fastapi_util.AuthError(err.code, 'you have no permission')
