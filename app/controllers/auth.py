@@ -1,5 +1,6 @@
 import sqlalchemy
 from fastapi import Depends
+from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr, SecretStr
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import expression as sql_exp
@@ -67,6 +68,8 @@ def signup_api(
             message=f'인증번호: {verify_token}',
         )
     )
+
+    db_session.commit()
 
 
 class _VerifyEmailRequest(BaseModel):
@@ -155,23 +158,54 @@ def login_api(
     )
 
 
-class _OauthSignUpRequest(BaseModel):
+@router.post('/login/oauth')
+def login_oauth_api(
+    q: OAuth2PasswordRequestForm = Depends(),
+    app_utils: AppUtils = Depends(get_app_utils),
+    db_session: Session = Depends(get_db_session),
+) -> _LoginResponse:
+    user = db_session \
+        .query(m.UserModel) \
+        .filter(m.UserModel.email == q.username) \
+        .one_or_none()
+
+    if user is None:
+        raise fastapi_util.NotFoundError(
+            code='not_found_user',
+            message='failed to found user by this email',
+        )
+
+    if not auth_util.validate_hashed_password(q.password, user.password):
+        raise fastapi_util.LogicError(
+            code='invalid_password',
+            message='this password is not valid'
+        )
+
+    access_token, refresh_token = app_utils.auth.generate_token(user.id)
+
+    return _LoginResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+    )
+
+
+class _SocialSignUpRequest(BaseModel):
     email: EmailStr
     token: str
     provider_type: oauth_util.ProviderTypeEnum
 
 
-class _OauthSignUpResponse(BaseModel):
+class _SocialSignUpResponse(BaseModel):
     access_token: str
     refresh_token: str
 
 
-@router.post('/signup/oauth')
+@router.post('/signup/social')
 def oauth_signup_api(
-    q: _OauthSignUpRequest,
+    q: _SocialSignUpRequest,
     app_utils: AppUtils = Depends(get_app_utils),
     db_session: Session = Depends(get_db_session),
-) -> _OauthSignUpResponse:
+) -> _SocialSignUpResponse:
     is_email_exist = db_session \
         .scalar(
             sql_exp
@@ -203,29 +237,24 @@ def oauth_signup_api(
 
     access_token, refresh_token = app_utils.auth.generate_token(user.id)
 
-    return _OauthSignUpResponse(
+    return _SocialSignUpResponse(
         access_token=access_token,
         refresh_token=refresh_token,
     )
 
 
-class _OauthLoginRequest(BaseModel):
+class _SocialLoginRequest(BaseModel):
     email: EmailStr
     token: str
     provider_type: oauth_util.ProviderTypeEnum
 
 
-class _OauthLoginResponse(BaseModel):
-    access_token: str
-    refresh_token: str
-
-
-@router.post('/login/oauth')
+@router.post('/login/social')
 def oauth_login_api(
-    q: _OauthLoginRequest,
+    q: _SocialLoginRequest,
     app_utils: AppUtils = Depends(get_app_utils),
     db_session: Session = Depends(get_db_session),
-) -> _OauthLoginResponse:
+) -> _LoginResponse:
     social_uid = oauth_util.get_social_uid_by_token_n_provider_type(q.token, q.provider_type)
 
     user = db_session \
@@ -245,7 +274,7 @@ def oauth_login_api(
 
     access_token, refresh_token = app_utils.auth.generate_token(user.id)
 
-    return _OauthLoginResponse(
+    return _LoginResponse(
         access_token=access_token,
         refresh_token=refresh_token,
     )

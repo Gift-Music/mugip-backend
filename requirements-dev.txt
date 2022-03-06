@@ -238,6 +238,10 @@ python-dotenv==0.19.2
     # via
     #   -c requirements.txt
     #   uvicorn
+python-multipart==0.0.5
+    # via
+    #   -c requirements.txt
+    #   mugip-backend
 pyyaml==6.0
     # via
     #   -c requirements.txt
@@ -262,6 +266,7 @@ six==1.16.0
     #   elasticsearch-dsl
     #   jsonschema
     #   python-dateutil
+    #   python-multipart
 smmap==5.0.0
     # via gitdb
 sniffio==1.2.0

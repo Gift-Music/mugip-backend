@@ -158,6 +158,7 @@ async def user_auth_required(
             sql_exp
             .exists()
             .where(m.UserModel.id == user_id)
+            .select()
         )
         if not is_user_exist:
             raise _AuthFailedError('user_deleted')

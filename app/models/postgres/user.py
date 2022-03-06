@@ -32,6 +32,7 @@ class UserModel(ModelBase):
         uselist=True,
         back_populates='target_user',
         cascade='all',
+        primaryjoin='(UserModel.id==UserFollowRelation.target_user_id)',
     )
 
     followings = relationship(
@@ -39,6 +40,7 @@ class UserModel(ModelBase):
         uselist=True,
         back_populates='request_user',
         cascade='all',
+        primaryjoin='(UserModel.id==UserFollowRelation.request_user_id)',
     )
 
     profile_images = relationship(
@@ -66,10 +68,10 @@ class UserFollowRelation(ModelBase):
     __tablename__ = 'user_follow_relation'
 
     request_user_id = Column(sqltypes.Integer, ForeignKey(UserModel.id), nullable=False, primary_key=True, index=True)
-    request_user = relationship('UserModel', uselist=False)
+    request_user = relationship('UserModel', uselist=False, foreign_keys=[request_user_id])
 
-    target_user_id = Column(sqltypes.Integer, nullable=False, primary_key=True)
-    target_user = relationship('UserModel', uselist=False)
+    target_user_id = Column(sqltypes.Integer, ForeignKey(UserModel.id), nullable=False, primary_key=True)
+    target_user = relationship('UserModel', uselist=False, foreign_keys=[target_user_id])
 
 
 class UserOauthLoginRelation(ModelBase):

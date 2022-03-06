@@ -11,5 +11,5 @@ ALL_ROUTERS = [
     index__router,
     user_router,
     music_router,
-    post_router, 
+    post_router,
 ]

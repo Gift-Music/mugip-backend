@@ -23,6 +23,7 @@ install_requires = [
     'psycopg2-binary==2.9.1',
     'pydantic==1.8.2',
     'pyjwt==2.2.0',
+    'python-multipart==0.0.5',
     'redis==3.5.3',
     'setuptools-scm==6.4.2',
     'sqlalchemy==1.4.25',

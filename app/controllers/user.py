@@ -242,6 +242,7 @@ def follow_post_api(
             sql_exp
             .exists()
             .where(m.UserModel.id == q.target_user_id)
+            .select()
         ) \
         .scalar()
 
