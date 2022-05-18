@@ -14,7 +14,7 @@ install_requires = [
     'aiofiles==0.7.0',
     'alembic==1.7.4',
     'email-validator==1.1.3',  # required by 'pydantic[email]' (https://github.com/pypa/pip/issues/9644)
-    'fastapi==0.73.0',
+    'fastapi==0.76.0',
     'gunicorn==20.1.0',
     'httpx==0.21.3',
     'jsonschema==3.2.0',
@@ -27,11 +27,9 @@ install_requires = [
     'redis==3.5.3',
     'setuptools-scm==6.4.2',
     'sqlalchemy==1.4.25',
-    'starlette==0.17.1',
-    'uvicorn[standard]==0.15.0',
+    'starlette==0.18.0',
+    'uvicorn[standard]==0.17.6',
     'uvloop==0.16.0',
-    'elasticsearch[async]==7.15.1',
-    'elasticsearch-dsl==7.4.0',
 ]
 
 dev_install_requires = [
@@ -43,11 +41,10 @@ dev_install_requires = [
     'flake8-isort==4.0.0',
     'flake8-logging-format==0.6.0',
     'flake8-quotes==3.2.0',
-    'flake8==3.9.2',
-    'mypy==0.910',
-    'pip-tools==6.2.0',
+    'flake8==4.0.1',
+    'mypy==0.950',
     'pytest-asyncio==0.15.1',
-    'pytest-cov==2.12.1',
+    'pytest-cov==3.0.0',
     'pytest-env==0.6.2',
     'pytest==6.2.4',
     'types-redis==3.5.6',

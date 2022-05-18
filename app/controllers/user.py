@@ -10,7 +10,7 @@ from sqlalchemy.sql import expression as sql_exp
 
 import app.models.postgres as m
 from app.utils.auth import user_auth_required
-from app.utils.fastapi import CustomAPIRouter, NotFoundError, get_db_session
+from app.utils.fastapi import CustomAPIRouter, LogicError, get_db_session
 from app.utils.filter_expr import build_filter_expr
 
 router = CustomAPIRouter(prefix='/user', tags=['user'])
@@ -22,20 +22,20 @@ class _UserPutRequest(BaseModel):
 
 
 @router.put('/')
-def user_put_me_api(
+async def user_put_me_api(
     q: _UserPutRequest,
     db_session: Session = Depends(get_db_session),
     me_user_id: int = Depends(user_auth_required),
 ) -> None:
     user = db_session \
-        .query(m.UserModel) \
-        .filter(m.UserModel.id == me_user_id) \
+        .query(m.User) \
+        .filter(m.User.id == me_user_id) \
         .one()
 
     user.nickname = q.nickname
 
     if q.profile_image_url is not None:
-        profile_image = m.UserProfileImageLogModel(
+        profile_image = m.UserProfileImageLog(
             user=user,
             profile_image_url=q.profile_image_url,
         )
@@ -55,31 +55,31 @@ class _UserGetResponse(BaseModel):
 
 
 @router.get('/')
-def user_get_me_api(
+async def user_get_me_api(
     db_session: Session = Depends(get_db_session),
     me_user_id: int = Depends(user_auth_required),
 ) -> _UserGetResponse:
     user = db_session \
-        .query(m.UserModel) \
-        .filter(m.UserModel.id == me_user_id) \
+        .query(m.User) \
+        .filter(m.User.id == me_user_id) \
         .one()
 
     return _UserGetResponse.from_orm(user)
 
 
 @router.get('/{user_id:int}')
-def user_get_api(
+async def user_get_api(
     user_id: int,
     db_session: Session = Depends(get_db_session),
     me_user_id: int = Depends(user_auth_required),
 ) -> _UserGetResponse:
     user = db_session \
-        .query(m.UserModel) \
-        .filter(m.UserModel.id == user_id) \
+        .query(m.User) \
+        .filter(m.User.id == user_id) \
         .one_or_none()
 
     if user is None:
-        raise NotFoundError(
+        raise LogicError(
             code='not_found_user',
             message='failed to found user by this id',
         )
@@ -125,14 +125,14 @@ class _UserSearchResponse(BaseModel):
 
 
 @router.post('/search')
-def user_search_post_api(
+async def user_search_post_api(
     q: _UserSearchRequest,
     response: Response,
     db_session: Session = Depends(get_db_session),
     me_user_id: int = Depends(user_auth_required),
 ) -> List[_UserSearchResponse]:
     users_query = db_session \
-        .query(m.UserModel)
+        .query(m.User)
 
     if q.filter_expr is not None:
         users_query = users_query \
@@ -140,18 +140,18 @@ def user_search_post_api(
                 _UserSearchRequestFilterExpr.to_query(
                     q.filter_expr,
                     {
-                        'email': m.UserModel.email.ilike,
-                        'nickname': m.UserModel.nickname.ilike,
+                        'email': m.User.email.ilike,
+                        'nickname': m.User.nickname.ilike,
                     }
                 )
             )
 
     sort_by_col = {
-        'id': m.UserModel.id,
-        'nickname': m.UserModel.nickname,
-        'email': m.UserModel.email,
-        'created': m.UserModel.created,
-        'updated': m.UserModel.updated,
+        'id': m.User.id,
+        'nickname': m.User.nickname,
+        'email': m.User.email,
+        'created': m.User.created,
+        'updated': m.User.updated,
     }[q.sort_by_key or 'id']
 
     sort_by_order_exp = {
@@ -174,17 +174,20 @@ def user_search_post_api(
 
 
 @router.get('/followers')
-def user_followers_get_api(
+async def user_followers_get_api(
     response: Response,
     offset: int = 0,
     count: int = 100,
     db_session: Session = Depends(get_db_session),
     me_user_id: int = Depends(user_auth_required),
 ) -> List[_UserSearchResponse]:
-    followers_query: Query[m.UserModel] = db_session \
-        .query(m.UserModel) \
-        .join(m.UserModel.followers) \
-        .filter(m.UserFollowRelation.target_user_id == me_user_id)
+    followers_query: Query[m.User] = db_session \
+        .query(m.User) \
+        .join(
+            m.UserFollow,
+            (m.User.id == m.UserFollow.request_user_id)
+        ) \
+        .filter(m.UserFollow.target_user_id == me_user_id)
 
     followers_count = followers_query.count()
     response.headers['x-total'] = str(followers_count)
@@ -201,17 +204,20 @@ def user_followers_get_api(
 
 
 @router.get('/followings')
-def user_followings_get_api(
+async def user_followings_get_api(
     response: Response,
     offset: int = 0,
     count: int = 100,
     db_session: Session = Depends(get_db_session),
     me_user_id: int = Depends(user_auth_required),
 ) -> List[_UserSearchResponse]:
-    followings_query: Query[m.UserModel] = db_session \
-        .query(m.UserModel) \
-        .join(m.UserModel.followings) \
-        .filter(m.UserFollowRelation.request_user_id == me_user_id)
+    followings_query: Query[m.User] = db_session \
+        .query(m.User) \
+        .join(
+            m.UserFollow,
+            (m.User.id == m.UserFollow.target_user_id),
+        ) \
+        .filter(m.UserFollow.request_user_id == me_user_id)
 
     followings_count = followings_query.count()
     response.headers['x-total'] = str(followings_count)
@@ -238,25 +244,35 @@ def follow_post_api(
     me_user_id: int = Depends(user_auth_required),
 ) -> None:
     is_target_user_exist: bool = db_session \
-        .query(
+        .scalar(
             sql_exp
             .exists()
-            .where(m.UserModel.id == q.target_user_id)
+            .where(m.User.id == q.target_user_id)
             .select()
-        ) \
-        .scalar()
+        )
 
     if not is_target_user_exist:
-        raise NotFoundError(
+        raise LogicError(
             code='not_found_user',
             message='failed to found user by this id',
         )
 
     db_session.add(
-        m.UserFollowRelation(
+        m.UserFollow(
             request_user_id=me_user_id,
             target_user_id=q.target_user_id,
         )
     )
+
+    db_session.commit()
+
+
+@router.delete('/')
+def delete_all(
+    db_session: Session = Depends(get_db_session),
+) -> None:
+    db_session \
+        .query(m.User) \
+        .delete()
 
     db_session.commit()

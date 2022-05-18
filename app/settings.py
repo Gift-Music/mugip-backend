@@ -75,11 +75,6 @@ class AppSettings(BaseSettings):
         description='Redis key prefix.',
     )
 
-    ELASTICSEARCH_CONNECT_URI: AnyUrl = Field(
-        default='http://127.0.0.1:35200/mugip',
-        description='ElasticSearch connection URI.',
-    )
-
     SENDER_MAIL: str = Field(
         default='mugip.giftmusic@gmail.com',
         description='sender account for verify email'
@@ -88,6 +83,16 @@ class AppSettings(BaseSettings):
     SENDER_MAIL_PASSWORD: str = Field(
         default='',
         description="sender account's app password"
+    )
+
+    SPOTIFY_CLIENT_ID: str = Field(
+        default='',
+        description='spotify client id',
+    )
+
+    SPOTIFY_CLIENT_SECRET: str = Field(
+        default='',
+        description='spotify client secret',
     )
 
     class Config:

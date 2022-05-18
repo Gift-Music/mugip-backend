@@ -5,6 +5,9 @@ from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 
+from app.utils.oauth import SocialAppUtil
+from app.utils.spotify import SpotifyAppUtil
+
 from .auth import AuthAppUtil
 from .email import EmailAppUtil
 
@@ -28,3 +31,11 @@ class AppUtils:
     @cached_property
     def email(self) -> EmailAppUtil:
         return EmailAppUtil(self._app_context)
+
+    @cached_property
+    def social(self) -> SocialAppUtil:
+        return SocialAppUtil(self._app_context)
+
+    @cached_property
+    def spotify(self) -> SpotifyAppUtil:
+        return SpotifyAppUtil(self._app_context)

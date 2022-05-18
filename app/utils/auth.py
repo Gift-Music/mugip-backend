@@ -157,7 +157,7 @@ async def user_auth_required(
         is_user_exist: bool = db_session.scalar(
             sql_exp
             .exists()
-            .where(m.UserModel.id == user_id)
+            .where(m.User.id == user_id)
             .select()
         )
         if not is_user_exist:

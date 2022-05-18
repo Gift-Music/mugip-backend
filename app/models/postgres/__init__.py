@@ -1,12 +1,22 @@
 from .base_ import ModelBase
-from .user import UserFollowRelation, UserModel, UserOauthLoginRelation, UserProfileImageLogModel
+from .digging import Album, Artist, ArtistTrack, DiggingLog, DiggingLogTag, Image, Tag, Track
+from .user import User, UserFollow, UserOauthLogin, UserProfileImageLog
 
 __all__ = [
     # base_
     'ModelBase',
     # user
-    'UserModel',
-    'UserFollowRelation',
-    'UserOauthLoginRelation',
-    'UserProfileImageLogModel',
+    'User',
+    'UserFollow',
+    'UserOauthLogin',
+    'UserProfileImageLog',
+    # digging
+    'Album',
+    'Artist',
+    'ArtistTrack',
+    'DiggingLog',
+    'DiggingLogTag',
+    'Image',
+    'Tag',
+    'Track',
 ]

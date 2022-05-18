@@ -38,10 +38,6 @@ class LogicError(_ManagedError):
     pass
 
 
-class NotFoundError(_ManagedError):
-    pass
-
-
 class _ErrorResponseModel(BaseModel):
     class ErrorDetail(BaseModel):
         code: str
@@ -109,11 +105,6 @@ class ErrorReportAndForgetMiddleware:
                 status_code=status.HTTP_409_CONFLICT,
                 content=_ErrorResponseModel.from_exc(err).dict()
             )
-        except NotFoundError as err:
-            err_response = JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content=_ErrorResponseModel.from_exc(err).dict()
-            )
         except Exception:
             logger.exception('Internal server error')
 
@@ -144,6 +135,15 @@ async def get_app_settings(request: Request) -> AppSettings:
 
 async def get_app_utils(request: Request) -> AppUtils:
     return AppContext.from_app(request.app).app_utils
+
+
+async def get_spotify_access_token(request: Request) -> str:
+    token = request.headers.get('sptify_access_token')
+    return (
+        token
+        if token is not None
+        else AppContext.from_app(request.app).app_utils.spotify.default_access_token
+    )
 
 
 async def get_db_session(request: Request) -> AsyncIterator[Session]:

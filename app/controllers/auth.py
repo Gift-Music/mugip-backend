@@ -1,3 +1,4 @@
+import jwt
 import sqlalchemy
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordRequestForm
@@ -6,12 +7,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import expression as sql_exp
 
 from app.models import postgres as m
+from app.settings import AppSettings
 from app.utils import AppUtils
 from app.utils import auth as auth_util
 from app.utils import email as email_util
 from app.utils import fastapi as fastapi_util
 from app.utils import oauth as oauth_util
-from app.utils.fastapi import CustomAPIRouter, get_app_utils, get_db_session
+from app.utils.fastapi import CustomAPIRouter, get_app_settings, get_app_utils, get_db_session
 
 router = CustomAPIRouter(prefix='/auth', tags=['auth'])
 
@@ -33,7 +35,7 @@ def signup_api(
         .scalar(
             sql_exp
             .exists()
-            .where(m.UserModel.email == q.email)
+            .where(m.User.email == q.email)
             .select()
         )
 
@@ -43,7 +45,7 @@ def signup_api(
             message='already exist email',
         )
 
-    user = m.UserModel(
+    user = m.User(
         email=q.email,
         nickname=q.nickname,
         password=auth_util.generate_hashed_password(q.password.get_secret_value()),
@@ -99,12 +101,12 @@ def verify_token_api(
     app_utils.auth.delete_verify_token(q.token)
 
     user = db_session \
-        .query(m.UserModel) \
-        .filter(m.UserModel.email == q.email) \
+        .query(m.User) \
+        .filter(m.User.email == q.email) \
         .one_or_none()
 
     if user is None:
-        raise fastapi_util.NotFoundError(
+        raise fastapi_util.LogicError(
             code='not_found_user',
             message='failed to found user by this email',
         )
@@ -134,17 +136,20 @@ def login_api(
     db_session: Session = Depends(get_db_session),
 ) -> _LoginResponse:
     user = db_session \
-        .query(m.UserModel) \
-        .filter(m.UserModel.email == q.email) \
+        .query(m.User) \
+        .filter(m.User.email == q.email) \
         .one_or_none()
 
     if user is None:
-        raise fastapi_util.NotFoundError(
+        raise fastapi_util.LogicError(
             code='not_found_user',
             message='failed to found user by this email',
         )
 
-    if not auth_util.validate_hashed_password(q.password.get_secret_value(), user.password):
+    if not auth_util.validate_hashed_password(
+        q.password.get_secret_value(),
+        user.password,  # type: ignore
+    ):
         raise fastapi_util.LogicError(
             code='invalid_password',
             message='this password is not valid'
@@ -165,17 +170,20 @@ def login_oauth_api(
     db_session: Session = Depends(get_db_session),
 ) -> _LoginResponse:
     user = db_session \
-        .query(m.UserModel) \
-        .filter(m.UserModel.email == q.username) \
+        .query(m.User) \
+        .filter(m.User.email == q.username) \
         .one_or_none()
 
     if user is None:
-        raise fastapi_util.NotFoundError(
+        raise fastapi_util.LogicError(
             code='not_found_user',
             message='failed to found user by this email',
         )
 
-    if not auth_util.validate_hashed_password(q.password, user.password):
+    if not auth_util.validate_hashed_password(
+        q.password,
+        user.password,  # type: ignore
+    ):
         raise fastapi_util.LogicError(
             code='invalid_password',
             message='this password is not valid'
@@ -190,43 +198,62 @@ def login_oauth_api(
 
 
 class _SocialSignUpRequest(BaseModel):
-    email: EmailStr
-    token: str
-    provider_type: oauth_util.ProviderTypeEnum
+    code: str
+    redirect_uri: str
+    provider_type: int
 
 
 class _SocialSignUpResponse(BaseModel):
     access_token: str
     refresh_token: str
+    social_access_token: str
+    social_refresh_token: str
 
 
 @router.post('/signup/social')
-def oauth_signup_api(
+async def social_signup_api(
     q: _SocialSignUpRequest,
     app_utils: AppUtils = Depends(get_app_utils),
     db_session: Session = Depends(get_db_session),
 ) -> _SocialSignUpResponse:
-    is_email_exist = db_session \
+    try:
+        social_access_token, social_refresh_token = await app_utils.social.get_social_token(
+            q.code,
+            q.redirect_uri,
+            q.provider_type,
+        )
+        social_info = await app_utils.social.get_social_info(social_access_token, q.provider_type)
+    except oauth_util.OauthUtilError as ex:
+        raise fastapi_util.LogicError(
+            code=ex.code,
+            message=ex.message,
+        )
+
+    is_oauth_login_exists: bool = db_session \
         .scalar(
             sql_exp
             .exists()
-            .where(m.UserModel.email == q.email)
+            .where(
+                (m.UserOauthLogin.uid == social_info.uid)
+                & (m.UserOauthLogin.provider_type == q.provider_type)
+            )
             .select()
         )
 
-    if is_email_exist:
+    if is_oauth_login_exists:
         raise fastapi_util.LogicError(
-            code='already_exist_email',
-            message='already exist email',
+            code='already_exist_uid',
+            message='Already signed up user',
         )
 
-    social_uid = oauth_util.get_social_uid_by_token_n_provider_type(q.token, q.provider_type)
+    user = m.User(
+        email=social_info.email,
+        nickname=social_info.name,
+    )
 
-    user = m.UserModel(email=q.email)
-
-    user_oauth_login = m.UserOauthLoginRelation(
+    user_oauth_login = m.UserOauthLogin(
         user=user,
-        uid=social_uid,
+        uid=social_info.uid,
         provider_type=q.provider_type,
     )
 
@@ -240,37 +267,142 @@ def oauth_signup_api(
     return _SocialSignUpResponse(
         access_token=access_token,
         refresh_token=refresh_token,
+        social_access_token=social_access_token,
+        social_refresh_token=social_refresh_token,
     )
 
 
 class _SocialLoginRequest(BaseModel):
-    email: EmailStr
-    token: str
+    code: str
+    redirect_uri: str
     provider_type: oauth_util.ProviderTypeEnum
 
 
+class _SocialLoginResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    social_access_token: str
+    social_refresh_token: str
+
+
 @router.post('/login/social')
-def oauth_login_api(
+async def social_login_api(
     q: _SocialLoginRequest,
     app_utils: AppUtils = Depends(get_app_utils),
     db_session: Session = Depends(get_db_session),
-) -> _LoginResponse:
-    social_uid = oauth_util.get_social_uid_by_token_n_provider_type(q.token, q.provider_type)
+) -> _SocialLoginResponse:
+    social_access_token, social_refresh_token = await app_utils.social.get_social_token(
+        q.code,
+        q.redirect_uri,
+        q.provider_type,
+    )
+    try:
+        social_info = await app_utils.social.get_social_info(social_access_token, q.provider_type)
+    except oauth_util.OauthUtilError as ex:
+        raise fastapi_util.LogicError(
+            code=ex.code,
+            message=ex.message,
+            detail=ex.detail,
+        )
 
     user = db_session \
-        .query(m.UserOauthLoginRelation.user) \
-        .join(m.UserOauthLoginRelation.user) \
+        .query(m.User) \
+        .join(m.User.user_oauth_logins) \
         .filter(
-            (m.UserOauthLoginRelation.uid == social_uid)
-            & (m.UserOauthLoginRelation.provider_type == q.provider_type)
+            (m.UserOauthLogin.uid == social_info.uid)
+            & (m.UserOauthLogin.provider_type == q.provider_type)
         ) \
         .one_or_none()
 
     if user is None:
-        raise fastapi_util.NotFoundError(
+        raise fastapi_util.LogicError(
             code='not_found_user',
             message='failed to found user by this email',
         )
+
+    access_token, refresh_token = app_utils.auth.generate_token(user.id)
+
+    return _SocialLoginResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        social_access_token=social_access_token,
+        social_refresh_token=social_refresh_token,
+    )
+
+
+class _AuthRefreshApiRequest(BaseModel):
+    refresh_token: str
+
+
+@router.post('/refresh')
+def refresh_api(
+    q: _AuthRefreshApiRequest,
+    app_utils: AppUtils = Depends(get_app_utils),
+    app_settings: AppSettings = Depends(get_app_settings),
+    db_session: Session = Depends(get_db_session),
+) -> _LoginResponse:
+    try:
+        token_info = jwt.decode(
+            jwt=q.refresh_token,
+            key=app_settings.SECRET_KEY,
+            algorithms=['HS256'],
+        )
+    except jwt.ExpiredSignatureError:
+        raise fastapi_util.AuthError(
+            code='token_is_expired',
+            message='refresh token is expired',
+        )
+    except jwt.DecodeError:
+        raise fastapi_util.AuthError(
+            code='token_decode_failure',
+            message='failed to decode token',
+        )
+
+    user_id = token_info.get('user_id')
+    if not isinstance(user_id, int):
+        raise fastapi_util.AuthError(
+            code='invalid_token_structure',
+            message='token structure is invalid',
+        )
+
+    is_user_exist: bool = db_session.scalar(
+        sql_exp
+        .exists()
+        .where(m.User.id == user_id)
+        .select()
+    )
+    if not is_user_exist:
+        raise fastapi_util.AuthError(
+            code='user_deleted',
+            message='user is not exists',
+        )
+
+    access_token, refresh_token = app_utils.auth.generate_token(user_id)
+
+    return _LoginResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+    )
+
+
+class _GuestLoginRequest(BaseModel):
+    nickname: str
+    is_agreed: bool
+
+
+@router.post('/login/guest')
+def guest_login_api(
+    q: _GuestLoginRequest,
+    app_utils: AppUtils = Depends(get_app_utils),
+    db_session: Session = Depends(get_db_session),
+) -> _LoginResponse:
+    user = m.User(
+        nickname=q.nickname,
+        password=auth_util.generate_hashed_password(auth_util.generate_random_token(10)),
+    )
+
+    db_session.add(user)
+    db_session.commit()
 
     access_token, refresh_token = app_utils.auth.generate_token(user.id)
 
