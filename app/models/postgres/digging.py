@@ -95,7 +95,9 @@ class DiggingLogTag(ModelBase):
 class Image(ModelBase):
     __tablename__ = 'image'
 
-    album_id = Column(sqltypes.String, ForeignKey(Album.id), nullable=False, primary_key=True)
+    id = Column(sqltypes.Integer, nullable=False, primary_key=True)
+
+    album_id = Column(sqltypes.String, ForeignKey(Album.id), nullable=False)
     album = relationship('Album', uselist=False)
 
     width = Column(sqltypes.Integer, nullable=False)
