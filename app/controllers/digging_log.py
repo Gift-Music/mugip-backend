@@ -44,6 +44,15 @@ async def digging_log_post_api(
             release_date=track_obj.album.release_date,
             total_tracks=track_obj.album.total_tracks,
         )
+        images = [
+            m.Image(
+                album=album,
+                width=image.width,
+                height=image.height,
+                url=image.url,
+            )
+            for image in track_obj.album.images
+        ]
         artists = [
             m.Artist(
                 id=artist.id,
@@ -67,6 +76,7 @@ async def digging_log_post_api(
         ]
         db_session.add(album)
         db_session.add(track)
+        db_session.add_all(images)
         db_session.add_all(artists)
         db_session.add_all(artist_tracks)
 
