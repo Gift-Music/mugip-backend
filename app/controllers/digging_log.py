@@ -8,6 +8,7 @@ from fastapi import Depends, Response
 from pydantic import BaseModel, Field, validator
 from sqlalchemy.orm import Session, contains_eager, joinedload
 from sqlalchemy.sql import expression as sql_exp
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.models import postgres as m
 from app.utils import AppUtils
@@ -38,12 +39,19 @@ async def digging_log_post_api(
 
     if track is None:
         track_obj = await app_utils.spotify.get_track(q.track_id)
-        album = m.Album(
-            id=track_obj.album.id,
-            name=track_obj.album.name,
-            release_date=track_obj.album.release_date,
-            total_tracks=track_obj.album.total_tracks,
-        )
+        album = db_session \
+            .query(m.Album) \
+            .filter(m.Album.id == track_obj.album.id) \
+            .one_or_none()
+
+        if album is None:
+            album = m.Album(
+                id=track_obj.album.id,
+                name=track_obj.album.name,
+                release_date=track_obj.album.release_date,
+                total_tracks=track_obj.album.total_tracks,
+            )
+
         images = [
             m.Image(
                 album=album,
@@ -53,13 +61,21 @@ async def digging_log_post_api(
             )
             for image in track_obj.album.images
         ]
-        artists = [
-            m.Artist(
-                id=artist.id,
-                name=artist.name,
-            )
-            for artist in track_obj.artists
-        ]
+
+        db_session.add(album)
+        db_session.add_all(images)
+
+        db_session.execute(
+            pg_insert(m.Artist.__table__)
+            .values([
+                {
+                    'id': artist.id,
+                    'name': artist.name,
+                }
+                for artist in track_obj.artists
+            ])
+            .on_conflict_do_nothing(constraint=m.Artist.__table__.primary_key)
+        )
         track = m.Track(
             album=album,
             id=track_obj.id,
@@ -69,15 +85,12 @@ async def digging_log_post_api(
         )
         artist_tracks = [
             m.ArtistTrack(
-                artist=artist,
+                artist_id=artist.id,
                 track=track,
             )
-            for artist in artists
+            for artist in track_obj.artists
         ]
-        db_session.add(album)
         db_session.add(track)
-        db_session.add_all(images)
-        db_session.add_all(artists)
         db_session.add_all(artist_tracks)
 
     tag = db_session \
