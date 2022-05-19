@@ -173,7 +173,8 @@ class _DiggingLogSearchResponse(BaseModel):
 
     class User(BaseModel):
         id: int
-        name: str
+        nickname: Optional[str]
+        email: Optional[str]
 
         class Config:
             orm_mode = True
@@ -183,6 +184,7 @@ class _DiggingLogSearchResponse(BaseModel):
         icon: str
 
     track: _DiggingLogSearchResponse.Track
+    user: _DiggingLogSearchResponse.User
     tags: List[_DiggingLogSearchResponse.Tag]
 
     class Config:
