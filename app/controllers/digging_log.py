@@ -198,6 +198,7 @@ class _DiggingLogSearchResponse(BaseModel):
         id: int
         nickname: Optional[str]
         email: Optional[str]
+        last_profile_image_url: Optional[str]
 
         class Config:
             orm_mode = True
