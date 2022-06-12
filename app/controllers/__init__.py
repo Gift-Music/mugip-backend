@@ -2,8 +2,8 @@ from .auth import router as auth_router
 from .digging_log import router as digging_log_router
 from .index_ import router as index__router
 from .music import router as music_router
-from .user import router as user_router
 from .tag import router as tag_router
+from .user import router as user_router
 
 __all__ = ['ALL_ROUTERS']
 

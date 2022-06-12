@@ -1,14 +1,14 @@
 from __future__ import annotations
-import datetime
 
+import datetime
 from typing import Any, Dict, List, Literal, Optional
 
 import jsonschema
 from fastapi import Depends, Response
 from pydantic import BaseModel, Field, validator
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, contains_eager, joinedload
 from sqlalchemy.sql import expression as sql_exp
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.models import postgres as m
 from app.utils import AppUtils

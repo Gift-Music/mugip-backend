@@ -11,23 +11,25 @@ except FileNotFoundError:
     long_description = ''
 
 install_requires = [
-    'aiofiles==0.7.0',
+    'aiofiles==0.8.0',
+    'asyncpg==0.25.0',
     'alembic==1.7.4',
-    'email-validator==1.1.3',  # required by 'pydantic[email]' (https://github.com/pypa/pip/issues/9644)
-    'fastapi==0.76.0',
+    'boto3[crt]==1.24.7',
+    'boto3-stubs[s3]==1.24.7',
+    'fastapi==0.78.0',
     'gunicorn==20.1.0',
     'httpx==0.21.3',
     'jsonschema==3.2.0',
     'lz4==3.1.3',
     'msgpack==1.0.2',
-    'psycopg2-binary==2.9.1',
-    'pydantic==1.8.2',
-    'pyjwt==2.2.0',
+    'pillow==9.1.1',
+    'pydantic[email]==1.9.1',
+    'pyjwt==2.4.0',
     'python-multipart==0.0.5',
-    'redis==3.5.3',
+    'redis==4.3.3',
     'setuptools-scm==6.4.2',
-    'sqlalchemy==1.4.25',
-    'starlette==0.18.0',
+    'sqlalchemy==1.4.37',
+    'starlette==0.19.1',
     'uvicorn[standard]==0.17.6',
     'uvloop==0.16.0',
 ]
@@ -41,14 +43,14 @@ dev_install_requires = [
     'flake8-isort==4.0.0',
     'flake8-logging-format==0.6.0',
     'flake8-quotes==3.2.0',
-    'flake8==4.0.1',
-    'mypy==0.950',
+    'flake8==3.9.2',
+    'mypy==0.961',
     'pytest-asyncio==0.15.1',
     'pytest-cov==3.0.0',
     'pytest-env==0.6.2',
     'pytest==6.2.4',
-    'types-redis==3.5.6',
-    'sqlalchemy-stubs==0.4',
+    'types-redis==4.2.6',
+    'sqlalchemy2-stubs==0.0.2a23',
 ]
 
 

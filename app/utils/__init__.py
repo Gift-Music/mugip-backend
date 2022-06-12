@@ -5,11 +5,11 @@ from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 
-from app.utils.oauth import SocialAppUtil
-from app.utils.spotify import SpotifyAppUtil
-
 from .auth import AuthAppUtil
 from .email import EmailAppUtil
+from .oauth import SocialAppUtil
+from .remote_file import RemoteFileAppUtil
+from .spotify import SpotifyAppUtil
 
 if TYPE_CHECKING:
     from app.context import AppContext
@@ -39,3 +39,7 @@ class AppUtils:
     @cached_property
     def spotify(self) -> SpotifyAppUtil:
         return SpotifyAppUtil(self._app_context)
+
+    @cached_property
+    def remote_file(self) -> RemoteFileAppUtil:
+        return RemoteFileAppUtil(self._app_context)

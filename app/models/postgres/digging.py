@@ -1,10 +1,10 @@
+from sqlalchemy import func as sql_func
+from sqlalchemy import orm as sql_orm
+from sqlalchemy import sql as sql_exp
 from sqlalchemy.orm import relationship
 from sqlalchemy.schema import Column
 from sqlalchemy.sql import sqltypes
 from sqlalchemy.sql.schema import ForeignKey
-from sqlalchemy import orm as sql_orm
-from sqlalchemy import sql as sql_exp
-from sqlalchemy import func as sql_func
 
 from .base_ import ModelBase
 from .user import User

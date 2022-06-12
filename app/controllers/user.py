@@ -1,16 +1,20 @@
+import io
+from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
 import jsonschema
 import jsonschema.exceptions
 import pydantic
-from fastapi import Depends, Response
+from fastapi import Depends, File, Response, UploadFile
+from PIL import Image
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Query, Session
 from sqlalchemy.sql import expression as sql_exp
 
 import app.models.postgres as m
+from app.utils import AppUtils
 from app.utils.auth import user_auth_required
-from app.utils.fastapi import CustomAPIRouter, LogicError, get_db_session
+from app.utils.fastapi import CustomAPIRouter, LogicError, get_app_utils, get_db_session
 from app.utils.filter_expr import build_filter_expr
 
 router = CustomAPIRouter(prefix='/user', tags=['user'])
@@ -85,6 +89,71 @@ async def user_get_api(
         )
 
     return _UserGetResponse.from_orm(user)
+
+
+@router.post('/profile_image')
+async def user_profile_image_post_api(
+    profile_file: UploadFile = File(),
+    db_session: Session = Depends(get_db_session),
+    me_user_id: int = Depends(user_auth_required),
+    app_utils: AppUtils = Depends(get_app_utils),
+) -> None:
+    current_dt = datetime.now().isoformat()
+
+    user = db_session \
+        .query(m.User) \
+        .filter(m.User.id == me_user_id) \
+        .one_or_none()
+
+    if user is None:
+        raise LogicError(
+            code='not_found_user',
+            message='failed to found user by this id',
+        )
+
+    try:
+        with (
+            Image.open(profile_file.file) as profile_image,
+            io.BytesIO() as f,
+        ):
+            # TODO : make the size of thumbnail configuable in config.py
+            profile_image = profile_image.convert('RGBA')
+            profile_image.thumbnail((300, 300))
+            new_profile_image = Image.new('RGB', profile_image.size, (255, 255, 255))
+
+            # Only non-transparent areas are pasted (box argument)
+            new_profile_image.paste(profile_image, box=profile_image)
+            new_profile_image.save(f, 'JPEG')
+
+            f.seek(0)
+
+            file_name = f'{me_user_id}_{current_dt}_{profile_file.filename}'
+            profile_image_url = app_utils.remote_file.upload_profile_image(
+                file_name,
+                f,
+            )
+
+    except RuntimeError as ex:
+        raise LogicError(
+            code='profile_file_upload_error',
+            message=ex.msg,
+            detail={'aws_error': ex.detail},
+        )
+    except Exception as ex:
+        raise LogicError(
+            code='cannot_open_profile',
+            message='you cannot open profile image',
+            detail={'ex': str(ex)},
+        )
+
+    db_session.add(
+        m.UserProfileImageLog(
+            profile_image_url=profile_image_url,
+            user=user,
+        )
+    )
+
+    db_session.commit()
 
 
 _UserSearchRequestFilterExpr = build_filter_expr({

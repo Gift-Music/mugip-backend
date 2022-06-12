@@ -95,6 +95,15 @@ class AppSettings(BaseSettings):
         description='spotify client secret',
     )
 
+    AWS_ACCESS_KEY_ID: str = Field(
+        default='',
+        description='aws access key id'
+    )
+    AWS_SECRET_ACCESS_KEY: str = Field(
+        default='',
+        description='aws secret access key'
+    )
+
     class Config:
         env_file = '.env'
         env_prefix = 'mugip_'
