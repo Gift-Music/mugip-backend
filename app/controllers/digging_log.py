@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import jsonschema
 from fastapi import Depends, Response
+from geoalchemy2 import WKTElement
 from pydantic import BaseModel, Field, validator
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, contains_eager, joinedload
 from sqlalchemy.sql import expression as sql_exp
 
+from app.constants import DEFAULT_SRID
 from app.models import postgres as m
 from app.utils import AppUtils
 from app.utils import fastapi as fastapi_util
@@ -23,6 +25,7 @@ router = fastapi_util.CustomAPIRouter(prefix='/digging_log', tags=['digging_log'
 class _DiggingLogPostRequest(BaseModel):
     track_id: str
     tag_name: str
+    coordinates: Tuple[float, float]
 
 
 @router.post('/')
@@ -115,9 +118,12 @@ async def digging_log_post_api(
             message='failed to found user by this id',
         )
 
+    coordinates = WKTElement(f'POINT ({q.coordinates[0]} {q.coordinates[1]})', srid=DEFAULT_SRID)
+
     digging_log = m.DiggingLog(
         user=user,
         track=track,
+        coordinates=coordinates,
     )
 
     db_session.add(digging_log)

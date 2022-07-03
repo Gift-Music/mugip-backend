@@ -1,3 +1,4 @@
+from geoalchemy2 import Geography
 from sqlalchemy import func as sql_func
 from sqlalchemy import orm as sql_orm
 from sqlalchemy import sql as sql_exp
@@ -5,6 +6,8 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.schema import Column
 from sqlalchemy.sql import sqltypes
 from sqlalchemy.sql.schema import ForeignKey
+
+from app.constants import DEFAULT_SRID
 
 from .base_ import ModelBase
 from .user import User
@@ -77,6 +80,8 @@ class DiggingLog(ModelBase):
 
     track_id = Column(sqltypes.String, ForeignKey(Track.id), nullable=False)
     track = relationship('Track', uselist=False, cascade='all')
+
+    coordinates = Column(Geography(geometry_type='POINT', srid=DEFAULT_SRID, spatial_index=True), nullable=True)
 
     digging_log_tags = relationship('DiggingLogTag', back_populates='digging_log', uselist=True, cascade='all')
     tags = sql_orm.ColumnProperty

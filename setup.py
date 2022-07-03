@@ -12,16 +12,17 @@ except FileNotFoundError:
 
 install_requires = [
     'aiofiles==0.8.0',
-    'asyncpg==0.25.0',
     'alembic==1.7.4',
     'boto3[crt]==1.24.7',
     'boto3-stubs[s3]==1.24.7',
     'fastapi==0.78.0',
+    'GeoAlchemy2==0.12.1',
     'gunicorn==20.1.0',
     'httpx==0.21.3',
     'jsonschema==3.2.0',
     'lz4==3.1.3',
     'msgpack==1.0.2',
+    'psycopg2-binary==2.9.1',
     'pillow==9.1.1',
     'pydantic[email]==1.9.1',
     'pyjwt==2.4.0',
