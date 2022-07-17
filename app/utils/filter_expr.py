@@ -9,7 +9,9 @@ from sqlalchemy.sql.expression import BooleanClauseList, ClauseElement
 
 class FilterExpr(NamedTuple):
     schema: dict[str, Any]
-    to_query: Callable[[dict[str, Any], dict[str, Callable[[Any], BooleanClauseList]]], ClauseElement]
+    to_query: Callable[
+        [dict[str, Any], dict[str, Callable[[Any], BooleanClauseList]]], ClauseElement
+    ]
     description: str
 
 
@@ -19,33 +21,37 @@ def _filter_expr_to_query(
 ) -> ClauseElement:
     expr_list = []
     for key, value_or_exprs in filter_expr.items():
-        if key == '$and':
+        if key == "$and":
             assert isinstance(value_or_exprs, list)
             expr_list.append(
                 sql_exp.and_(
-                    *[_filter_expr_to_query(expr, key_func_dict) for expr in value_or_exprs if expr]
+                    *[
+                        _filter_expr_to_query(expr, key_func_dict)
+                        for expr in value_or_exprs
+                        if expr
+                    ]
                 )
             )
-        elif key == '$or':
+        elif key == "$or":
             assert isinstance(value_or_exprs, list)
             expr_list.append(
                 sql_exp.or_(
-                    *[_filter_expr_to_query(expr, key_func_dict) for expr in value_or_exprs if expr]
+                    *[
+                        _filter_expr_to_query(expr, key_func_dict)
+                        for expr in value_or_exprs
+                        if expr
+                    ]
                 )
             )
-        elif key == '$not':
+        elif key == "$not":
             assert isinstance(value_or_exprs, dict)
             expr_list.append(
-                sql_exp.not_(
-                    _filter_expr_to_query(value_or_exprs, key_func_dict)
-                )
+                sql_exp.not_(_filter_expr_to_query(value_or_exprs, key_func_dict))
             )
         elif key in key_func_dict:
-            expr_list.append(
-                key_func_dict[key](value_or_exprs)
-            )
+            expr_list.append(key_func_dict[key](value_or_exprs))
         else:
-            raise RuntimeError('Func for the key is not defined', key)
+            raise RuntimeError("Func for the key is not defined", key)
 
     if not expr_list:
         return sql_exp.true()
@@ -53,25 +59,27 @@ def _filter_expr_to_query(
     return sql_exp.and_(*expr_list)
 
 
-def _filter_expr_to_schema(filter_key_to_schema: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def _filter_expr_to_schema(
+    filter_key_to_schema: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
     random_scheme_id = uuid.uuid4().hex
 
     return {
-        '$id': random_scheme_id,
-        'type': 'object',
-        'properties': {
-            '$and': {
-                'type': 'array',
-                'items': {'$ref': random_scheme_id},
+        "$id": random_scheme_id,
+        "type": "object",
+        "properties": {
+            "$and": {
+                "type": "array",
+                "items": {"$ref": random_scheme_id},
             },
-            '$or': {
-                'type': 'array',
-                'items': {'$ref': random_scheme_id},
+            "$or": {
+                "type": "array",
+                "items": {"$ref": random_scheme_id},
             },
-            '$not': {'$ref': random_scheme_id},
-            **filter_key_to_schema
+            "$not": {"$ref": random_scheme_id},
+            **filter_key_to_schema,
         },
-        'additionalProperties': False,
+        "additionalProperties": False,
     }
 
 
@@ -79,8 +87,9 @@ def build_filter_expr(filter_key_to_schema: dict[str, dict[str, Any]]) -> Filter
     return FilterExpr(
         schema=_filter_expr_to_schema(filter_key_to_schema),
         to_query=_filter_expr_to_query,
-        description='filtering on %s' % ', '.join(
+        description="filtering on %s"
+        % ", ".join(
             f'`{key}:{expr.get("type", "any")}`'
             for key, expr in filter_key_to_schema.items()
-        )
+        ),
     )

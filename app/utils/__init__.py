@@ -22,6 +22,7 @@ class AppUtils:
     @property
     def _app_context(self) -> AppContext:
         from app.context import AppContext
+
         return AppContext.from_app(self.app)
 
     @cached_property

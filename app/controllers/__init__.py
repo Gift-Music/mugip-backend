@@ -5,7 +5,7 @@ from .music import router as music_router
 from .tag import router as tag_router
 from .user import router as user_router
 
-__all__ = ['ALL_ROUTERS']
+__all__ = ["ALL_ROUTERS"]
 
 ALL_ROUTERS = [
     auth_router,

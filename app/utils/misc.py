@@ -15,19 +15,19 @@ def dt_to_ts(dt: datetime.datetime) -> int:
 
 
 def msgpack_decoder(obj: Any) -> Any:
-    if '__datetime__' in obj:
-        obj = datetime.datetime.fromtimestamp(obj['ts'], tz=TZ_UTC)
+    if "__datetime__" in obj:
+        obj = datetime.datetime.fromtimestamp(obj["ts"], tz=TZ_UTC)
     return obj
 
 
 def msgpack_encoder(obj: Any) -> Any:
     if isinstance(obj, datetime.datetime):
         return {
-            '__datetime__': True,
-            'ts': obj.timestamp(),
+            "__datetime__": True,
+            "ts": obj.timestamp(),
         }
     return obj
 
 
 def to_dot_format(dt_str: str) -> str:
-    return f'{dt_str[0:4]}. {dt_str[4:6]}. {dt_str[6:8]}'
+    return f"{dt_str[0:4]}. {dt_str[4:6]}. {dt_str[6:8]}"

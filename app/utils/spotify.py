@@ -15,8 +15,8 @@ from app.utils.base_ import AppUtilBase
 logger = logging.getLogger(__name__)
 
 
-SPOTIFY_AUTH_BASE_URL = 'https://accounts.spotify.com'
-SPOTIFY_API_BASE_URL = 'https://api.spotify.com/v1'
+SPOTIFY_AUTH_BASE_URL = "https://accounts.spotify.com"
+SPOTIFY_API_BASE_URL = "https://api.spotify.com/v1"
 
 
 @dataclasses.dataclass
@@ -32,34 +32,40 @@ class SpotifyAppUtil(AppUtilBase):
 
     @cached_property
     def redis_keyspace(self) -> str:
-        return f'{self.app_settings.REDIS_KEY_PREFIX}:spotify'
+        return f"{self.app_settings.REDIS_KEY_PREFIX}:spotify"
 
     @cached_property
     def auth_token(self) -> str:
         return b64encode(
-            (self.app_settings.SPOTIFY_CLIENT_ID + ':' + self.app_settings.SPOTIFY_CLIENT_SECRET).encode()
+            (
+                self.app_settings.SPOTIFY_CLIENT_ID
+                + ":"
+                + self.app_settings.SPOTIFY_CLIENT_SECRET
+            ).encode()
         ).decode()
 
     @property
-    async def default_access_token(self) -> str:
+    async def client_credentials(self) -> str:
         if (
             self._default_token is None
             or self._default_token_expired_dt > datetime.datetime.now()
         ):
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
-                    url=SPOTIFY_AUTH_BASE_URL + '/api/token',
+                    url=SPOTIFY_AUTH_BASE_URL + "/api/token",
                     data={
-                        'grant_type': 'client_credentials',
+                        "grant_type": "client_credentials",
                     },
-                    headers={'Authorization': f'Basic {self.auth_token}'}
+                    headers={"Authorization": f"Basic {self.auth_token}"},
                 )
                 print(resp.json())
 
             resp_json = resp.json()
 
-            self._default_token = resp_json['access_token']
-            self._default_token_expired_dt = datetime.datetime.now() + datetime.timedelta(resp_json['expires_in'])
+            self._default_token = resp_json["access_token"]
+            self._default_token_expired_dt = (
+                datetime.datetime.now() + datetime.timedelta(resp_json["expires_in"])
+            )
 
         return self._default_token
 
@@ -79,21 +85,21 @@ class SpotifyAppUtil(AppUtilBase):
 
             if resp.status_code != 200:
                 raise SpotifyUtilError(
-                    code='failed_to_fetch_spotify_token',
-                    message='something wrong',
+                    code="failed_to_fetch_spotify_token",
+                    message="something wrong",
                 )
 
         return resp_model.parse_obj(resp.json())
 
     async def get_track(self, track_id: str) -> m.Track:
-        track = self.app_context.redis.get(f'{self.redis_keyspace}:track:{track_id}')
+        track = self.app_context.redis.get(f"{self.redis_keyspace}:track:{track_id}")
         return (
             track
             if track is not None
             else await self._get_request(
-                f'{SPOTIFY_API_BASE_URL}/tracks/{track_id}',
+                f"{SPOTIFY_API_BASE_URL}/tracks/{track_id}",
                 resp_model=m.Track,
-                headers={'Authorization': f'Bearer {await self.default_access_token}'},
+                headers={"Authorization": f"Bearer {await self.client_credentials}"},
             )
         )
 
@@ -101,14 +107,14 @@ class SpotifyAppUtil(AppUtilBase):
 async def spotify_me_api(token: str) -> dict[str, Any]:
     async with httpx.AsyncClient() as client:
         resp = await client.get(
-            url=SPOTIFY_API_BASE_URL + '/me',
-            headers={'Authorization': f'Bearer {token}'},
+            url=SPOTIFY_API_BASE_URL + "/me",
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         if resp.status_code != 200:
             raise SpotifyUtilError(
-                code='failed_to_fetch_spotify_profile',
-                message='something wrong',
+                code="failed_to_fetch_spotify_profile",
+                message="something wrong",
             )
 
     return resp.json()

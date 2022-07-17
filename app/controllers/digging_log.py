@@ -19,7 +19,7 @@ from app.utils.auth import user_auth_required
 from app.utils.fastapi import get_app_utils, get_db_session
 from app.utils.filter_expr import build_filter_expr
 
-router = fastapi_util.CustomAPIRouter(prefix='/digging_log', tags=['digging_log'])
+router = fastapi_util.CustomAPIRouter(prefix="/digging_log", tags=["digging_log"])
 
 
 class _DiggingLogPostRequest(BaseModel):
@@ -28,24 +28,22 @@ class _DiggingLogPostRequest(BaseModel):
     coordinates: Tuple[float, float]
 
 
-@router.post('/')
+@router.post("/")
 async def digging_log_post_api(
     q: _DiggingLogPostRequest,
     db_session: Session = Depends(get_db_session),
     app_utils: AppUtils = Depends(get_app_utils),
     me_user_id: int = Depends(user_auth_required),
 ) -> None:
-    track = db_session \
-        .query(m.Track) \
-        .filter(m.Track.id == q.track_id) \
-        .one_or_none()
+    track = db_session.query(m.Track).filter(m.Track.id == q.track_id).one_or_none()
 
     if track is None:
         track_obj = await app_utils.spotify.get_track(q.track_id)
-        album = db_session \
-            .query(m.Album) \
-            .filter(m.Album.id == track_obj.album.id) \
+        album = (
+            db_session.query(m.Album)
+            .filter(m.Album.id == track_obj.album.id)
             .one_or_none()
+        )
 
         if album is None:
             album = m.Album(
@@ -70,13 +68,15 @@ async def digging_log_post_api(
 
         db_session.execute(
             pg_insert(m.Artist.__table__)
-            .values([
-                {
-                    'id': artist.id,
-                    'name': artist.name,
-                }
-                for artist in track_obj.artists
-            ])
+            .values(
+                [
+                    {
+                        "id": artist.id,
+                        "name": artist.name,
+                    }
+                    for artist in track_obj.artists
+                ]
+            )
             .on_conflict_do_nothing(constraint=m.Artist.__table__.primary_key)
         )
         track = m.Track(
@@ -96,29 +96,25 @@ async def digging_log_post_api(
         db_session.add(track)
         db_session.add_all(artist_tracks)
 
-    tag = db_session \
-        .query(m.Tag) \
-        .filter(m.Tag.name == q.tag_name) \
-        .one_or_none()
+    tag = db_session.query(m.Tag).filter(m.Tag.name == q.tag_name).one_or_none()
 
     if tag is None:
         raise fastapi_util.LogicError(
-            code='not_found_tag',
-            message='failed to found tag by this name',
+            code="not_found_tag",
+            message="failed to found tag by this name",
         )
 
-    user = db_session \
-        .query(m.User) \
-        .filter(m.User.id == me_user_id) \
-        .one_or_none()
+    user = db_session.query(m.User).filter(m.User.id == me_user_id).one_or_none()
 
     if user is None:
         raise fastapi_util.LogicError(
-            code='not_found_user',
-            message='failed to found user by this id',
+            code="not_found_user",
+            message="failed to found user by this id",
         )
 
-    coordinates = WKTElement(f'POINT ({q.coordinates[0]} {q.coordinates[1]})', srid=DEFAULT_SRID)
+    coordinates = WKTElement(
+        f"POINT ({q.coordinates[0]} {q.coordinates[1]})", srid=DEFAULT_SRID
+    )
 
     digging_log = m.DiggingLog(
         user=user,
@@ -138,22 +134,28 @@ async def digging_log_post_api(
     db_session.commit()
 
 
-_DiggingLogSearchRequestFilterExpr = build_filter_expr({
-    'user_id': {'type': 'integer'},
-    'track_id': {'type': 'string'},
-    'tag_name': {'type': 'string'},
-})
+_DiggingLogSearchRequestFilterExpr = build_filter_expr(
+    {
+        "user_id": {"type": "integer"},
+        "track_id": {"type": "string"},
+        "tag_name": {"type": "string"},
+    }
+)
 
 
 class _DiggingLogSearchRequest(BaseModel):
-    filter_expr: Optional[Dict[str, Any]] = Field(description=_DiggingLogSearchRequestFilterExpr.description)
-    sort_by_key: Optional[Literal['created', 'updated']]
-    sort_by_order: Optional[Literal['asc', 'desc']]
+    filter_expr: Optional[Dict[str, Any]] = Field(
+        description=_DiggingLogSearchRequestFilterExpr.description
+    )
+    sort_by_key: Optional[Literal["created", "updated"]]
+    sort_by_order: Optional[Literal["asc", "desc"]]
     offset: int = Field(ge=0)
     count: int = Field(ge=1, le=100)
 
-    @validator('filter_expr')
-    def validator_filter_expr(cls, value: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    @validator("filter_expr")
+    def validator_filter_expr(
+        cls, value: Optional[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
         if value is not None:
             try:
                 jsonschema.validate(
@@ -227,53 +229,53 @@ _DiggingLogSearchResponse.Album.update_forward_refs()
 _DiggingLogSearchResponse.Artist.update_forward_refs()
 
 
-@router.post('/search')
+@router.post("/search")
 def digging_log_search_api(
     q: _DiggingLogSearchRequest,
     response: Response,
     db_session: Session = Depends(get_db_session),
     me_user_id: int = Depends(user_auth_required),
 ) -> List[_DiggingLogSearchResponse]:
-    digging_logs_query = db_session \
-        .query(m.DiggingLog) \
-        .join(m.DiggingLog.digging_log_tags) \
+    digging_logs_query = (
+        db_session.query(m.DiggingLog)
+        .join(m.DiggingLog.digging_log_tags)
         .options(
             contains_eager(m.DiggingLog.digging_log_tags),
             joinedload(m.DiggingLog.track),
         )
+    )
 
     if q.filter_expr is not None:
-        digging_logs_query = digging_logs_query \
-            .filter(
-                _DiggingLogSearchRequestFilterExpr.to_query(
-                    q.filter_expr,
-                    {
-                        'user_id': m.DiggingLog.user_id.__eq__,
-                        'track_id': m.DiggingLog.track_id.__eq__,
-                        'tag_name': m.Tag.name.ilike,
-                    }
-                )
+        digging_logs_query = digging_logs_query.filter(
+            _DiggingLogSearchRequestFilterExpr.to_query(
+                q.filter_expr,
+                {
+                    "user_id": m.DiggingLog.user_id.__eq__,
+                    "track_id": m.DiggingLog.track_id.__eq__,
+                    "tag_name": m.Tag.name.ilike,
+                },
             )
+        )
 
     sort_by_col = {
-        'created': m.Tag.created,
-        'updated': m.Tag.updated,
-    }[q.sort_by_key or 'id']
+        "created": m.Tag.created,
+        "updated": m.Tag.updated,
+    }[q.sort_by_key or "id"]
 
     sort_by_order_exp = {
-        'asc': sql_exp.asc,
-        'desc': sql_exp.desc,
-    }[q.sort_by_order or 'asc']
+        "asc": sql_exp.asc,
+        "desc": sql_exp.desc,
+    }[q.sort_by_order or "asc"]
 
     digging_logs_count = digging_logs_query.count()
-    response.headers['x-total'] = str(digging_logs_count)
+    response.headers["x-total"] = str(digging_logs_count)
 
-    digging_logs = digging_logs_query \
-        .order_by(sort_by_order_exp(sort_by_col)) \
-        .slice(q.offset, q.offset + q.count) \
+    digging_logs = (
+        digging_logs_query.order_by(sort_by_order_exp(sort_by_col))
+        .slice(q.offset, q.offset + q.count)
         .all()
+    )
 
     return [
-        _DiggingLogSearchResponse.from_orm(digging_log)
-        for digging_log in digging_logs
+        _DiggingLogSearchResponse.from_orm(digging_log) for digging_log in digging_logs
     ]
