@@ -8,11 +8,10 @@
 
 ## Setup steps
 1. `docker-compose up` in mugip-backend-environment
-2. `cp ./configs/example.py ./configs/default.py`
-3. `pip install -r requirements`
-4. `pip install -e .[dev]` > for dev requirements
-5. `alembic upgrade head` > for migration
-6. `python launcher.py` > start app
+2. `pip install -U pip-tools`
+3. `pip-sync requirements-dev.txt`
+3. `alembic upgrade head` > for migration
+4. `python launcher.py` > start app
 
 
 ## Migration guide
