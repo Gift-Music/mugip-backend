@@ -10,5 +10,5 @@ app_settings = AppSettings()
 
 app = create_app(app_settings)
 
-if __name__ == '__main__':
-    uvicorn.run(app, host='0.0.0.0', port=5468)
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=5468)

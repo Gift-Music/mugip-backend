@@ -17,17 +17,21 @@ class EmailModel(BaseModel):
 class EmailAppUtil(AppUtilBase):
     @cached_property
     def send_server(self) -> smtplib.SMTP:
-        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server = smtplib.SMTP("smtp.gmail.com", 587)
         server.starttls()
-        server.login(self.app_settings.SENDER_MAIL, self.app_settings.SENDER_MAIL_PASSWORD)
+        server.login(
+            self.app_settings.SENDER_MAIL, self.app_settings.SENDER_MAIL_PASSWORD
+        )
         return server
 
     def send_email(self, mail_model: EmailModel) -> None:
         mail = MIMEMultipart()
-        mail['Subject'] = mail_model.subject
-        mail['From'] = self.app_settings.SENDER_MAIL
-        mail['To'] = mail_model.to
+        mail["Subject"] = mail_model.subject
+        mail["From"] = self.app_settings.SENDER_MAIL
+        mail["To"] = mail_model.to
 
-        mail.attach(MIMEText(mail_model.message, 'plain'))
+        mail.attach(MIMEText(mail_model.message, "plain"))
 
-        self.send_server.sendmail(self.app_settings.SENDER_MAIL, mail_model.to, mail.as_string())
+        self.send_server.sendmail(
+            self.app_settings.SENDER_MAIL, mail_model.to, mail.as_string()
+        )

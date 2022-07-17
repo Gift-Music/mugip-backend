@@ -20,33 +20,36 @@ from .settings import AppSettings
 from .utils import AppUtils
 from .utils.fastapi import FASTAPI_RESPONSES, ErrorReportAndForgetMiddleware
 
-__version__ = get_version(root='..', relative_to=__file__)
+__version__ = get_version(root="..", relative_to=__file__)
 
 logger = logging.getLogger(__name__)
 
 
 def init_logger(app_settings: AppSettings) -> None:
-    _init_logger(f'mugip-backend@{__version__}', app_settings)
+    _init_logger(f"mugip-backend@{__version__}", app_settings)
 
 
 def create_app(app_settings: AppSettings) -> FastAPI:
     app = FastAPI(responses=FASTAPI_RESPONSES)
-    app.add_event_handler('startup', functools.partial(_web_app_startup, app=app, app_settings=app_settings))
-    app.add_event_handler('shutdown', functools.partial(_web_app_shutdown, app=app))
+    app.add_event_handler(
+        "startup",
+        functools.partial(_web_app_startup, app=app, app_settings=app_settings),
+    )
+    app.add_event_handler("shutdown", functools.partial(_web_app_shutdown, app=app))
 
     if app_settings.DEBUG_ALLOW_CORS_ALL_ORIGIN:
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=['*'],
+            allow_origins=["*"],
             allow_credentials=True,
-            allow_methods=['*'],
-            allow_headers=['*'],
-            expose_headers=['x-total'],
+            allow_methods=["*"],
+            allow_headers=["*"],
+            expose_headers=["x-total"],
         )
-        logger.error('`DEBUG_ALLOW_CORS_ALL_ORIGIN` is on!')
+        logger.error("`DEBUG_ALLOW_CORS_ALL_ORIGIN` is on!")
 
     if app_settings.DEBUG_ALLOW_NON_CERTIFICATED_USER_GET_TOKEN:
-        logger.error('`DEBUG_ALLOW_NON_CERTIFICATED_USER_GET_TOKEN` is on!')
+        logger.error("`DEBUG_ALLOW_NON_CERTIFICATED_USER_GET_TOKEN` is on!")
 
     app.add_middleware(ErrorReportAndForgetMiddleware)
 
@@ -64,15 +67,18 @@ async def _web_app_startup(app: FastAPI, app_settings: AppSettings) -> None:
 
     db_engine = create_engine(
         app_settings.DATABASE_URI,
-        logging_name='sa_logger',
+        logging_name="sa_logger",
         **app_settings.DATABASE_OPTIONS,
     )
 
     # NOTE : prevent SQLA's own logs to be propagated to API logger
-    logging.getLogger('api.orm.base.EngineWrapper.sa_logger').propagate = False
+    logging.getLogger("api.orm.base.EngineWrapper.sa_logger").propagate = False
 
     socket_keepalive_options = {
-        int(k): v for k, v in app_settings.REDIS_CONNECT_CONFIG.pop('socket_keepalive_options', {}).items()
+        int(k): v
+        for k, v in app_settings.REDIS_CONNECT_CONFIG.pop(
+            "socket_keepalive_options", {}
+        ).items()
     }
 
     redis = Redis(
@@ -90,7 +96,7 @@ async def _web_app_startup(app: FastAPI, app_settings: AppSettings) -> None:
         app_utils=AppUtils(app),
     )
 
-    app.extra['app_context'] = app_context
+    app.extra["app_context"] = app_context
 
 
 async def _web_app_shutdown(app: FastAPI) -> None:

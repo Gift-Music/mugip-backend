@@ -17,6 +17,6 @@ def test_init_logger(_app_settings: AppSettings) -> None:
 
 @pytest.mark.asyncio
 async def test_create_app(app_client: AsyncClient) -> None:
-    ping_r = await app_client.get('/_ping')
+    ping_r = await app_client.get("/_ping")
     assert ping_r.status_code == 200
-    assert ping_r.json() == {'ok': True}
+    assert ping_r.json() == {"ok": True}

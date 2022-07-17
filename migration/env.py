@@ -20,7 +20,7 @@ def _app_init():  # type: ignore
 
     app_settings = AppSettings()
 
-    config.set_main_option('sqlalchemy.url', app_settings.DATABASE_URI)
+    config.set_main_option("sqlalchemy.url", app_settings.DATABASE_URI)
     return ModelBase.metadata
 
 
@@ -46,13 +46,13 @@ def _(context, revision, op):  # type: ignore
                 op.table_name,
                 op.column.name,
                 modify_nullable=False,
-                existing_type=op.column.type
-            )
+                existing_type=op.column.type,
+            ),
         ]
 
 
 def run_migrations_offline() -> None:
-    '''Run migrations in 'offline' mode.
+    """Run migrations in 'offline' mode.
 
     This configures the context with just a URL
     and not an Engine, though an Engine is acceptable
@@ -61,8 +61,8 @@ def run_migrations_offline() -> None:
 
     Calls to context.execute() here emit the given string to the
     script output.
-    '''
-    url = config.get_main_option('sqlalchemy.url')
+    """
+    url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -77,15 +77,15 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    '''Run migrations in 'online' mode.
+    """Run migrations in 'online' mode.
 
     In this scenario we need to create an Engine
     and associate a connection with the context.
 
-    '''
+    """
     connectable = engine_from_config(
         config.get_section(config.config_ini_section),
-        prefix='sqlalchemy.',
+        prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
 
@@ -94,7 +94,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             include_object=_include_object,
-            sqlalchemy_module_prefix='sa.',
+            sqlalchemy_module_prefix="sa.",
             process_revision_directives=writer,
             compare_server_default=True,
             compare_type=True,

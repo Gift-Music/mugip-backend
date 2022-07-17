@@ -4,7 +4,8 @@ import asyncio
 import dataclasses
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, Optional, get_type_hints
+from typing import (TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, Optional,
+                    get_type_hints)
 
 from fastapi import APIRouter, Request, status
 from fastapi.responses import JSONResponse
@@ -38,10 +39,6 @@ class LogicError(_ManagedError):
     pass
 
 
-class NotFoundError(_ManagedError):
-    pass
-
-
 class _ErrorResponseModel(BaseModel):
     class ErrorDetail(BaseModel):
         code: str
@@ -66,17 +63,17 @@ _ErrorResponseModel.update_forward_refs()
 
 FASTAPI_RESPONSES: dict[int | str, dict[str, Any]] = {
     403: {
-        'description': 'Auth Error',
-        'model': _ErrorResponseModel,
+        "description": "Auth Error",
+        "model": _ErrorResponseModel,
     },
     409: {
-        'description': 'Logical error',
-        'model': _ErrorResponseModel,
+        "description": "Logical error",
+        "model": _ErrorResponseModel,
     },
     500: {
-        'description': 'Server error',
-        'model': _ErrorResponseModel,
-    }
+        "description": "Server error",
+        "model": _ErrorResponseModel,
+    },
 }
 
 
@@ -90,7 +87,7 @@ class ErrorReportAndForgetMiddleware:
         async def _send(message: Message) -> None:
             nonlocal response_started
 
-            if message['type'] == 'http.response.start':
+            if message["type"] == "http.response.start":
                 response_started = True
 
             await send(message)
@@ -102,29 +99,24 @@ class ErrorReportAndForgetMiddleware:
         except AuthError as err:
             err_response = JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
-                content=_ErrorResponseModel.from_exc(err).dict()
+                content=_ErrorResponseModel.from_exc(err).dict(),
             )
         except LogicError as err:
             err_response = JSONResponse(
                 status_code=status.HTTP_409_CONFLICT,
-                content=_ErrorResponseModel.from_exc(err).dict()
-            )
-        except NotFoundError as err:
-            err_response = JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content=_ErrorResponseModel.from_exc(err).dict()
+                content=_ErrorResponseModel.from_exc(err).dict(),
             )
         except Exception:
-            logger.exception('Internal server error')
+            logger.exception("Internal server error")
 
             err_response = JSONResponse(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 content=_ErrorResponseModel(
                     detail=_ErrorResponseModel.ErrorDetail(
-                        code='server_error',
-                        message='unexpected server error',
+                        code="server_error",
+                        message="unexpected server error",
                     )
-                ).dict()
+                ).dict(),
             )
 
         if not response_started:
@@ -132,9 +124,11 @@ class ErrorReportAndForgetMiddleware:
 
 
 class CustomAPIRouter(APIRouter):
-    def add_api_route(self, path: str, endpoint: Callable[..., Any], **kwargs: Any) -> None:
-        if kwargs.get('response_model') is None:
-            kwargs['response_model'] = get_type_hints(endpoint).get('return')
+    def add_api_route(
+        self, path: str, endpoint: Callable[..., Any], **kwargs: Any
+    ) -> None:
+        if kwargs.get("response_model") is None:
+            kwargs["response_model"] = get_type_hints(endpoint).get("return")
         return super().add_api_route(path, endpoint, **kwargs)
 
 
@@ -144,6 +138,15 @@ async def get_app_settings(request: Request) -> AppSettings:
 
 async def get_app_utils(request: Request) -> AppUtils:
     return AppContext.from_app(request.app).app_utils
+
+
+async def get_spotify_access_token(request: Request) -> str:
+    token = request.headers.get("sptify_access_token")
+    return (
+        token
+        if token is not None
+        else AppContext.from_app(request.app).app_utils.spotify.client_credentials
+    )
 
 
 async def get_db_session(request: Request) -> AsyncIterator[Session]:
@@ -166,9 +169,9 @@ async def get_db_session(request: Request) -> AsyncIterator[Session]:
 
 
 async def get_client_ip(request: Request) -> str:
-    x_forwarded_for = request.headers.get('X-FORWARDED-FOR')
+    x_forwarded_for = request.headers.get("X-FORWARDED-FOR")
     return (  # type: ignore
-        (x_forwarded_for.split(',')[0]).split(':')[0]
+        (x_forwarded_for.split(",")[0]).split(":")[0]
         if x_forwarded_for
         else request.client.host
     )
