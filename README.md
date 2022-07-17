@@ -8,6 +8,7 @@
 
 ## Setup steps
 1. `docker-compose up` in mugip-backend-environment
+2. `python -m venv python-env`
 2. `pip install -U pip-tools`
 3. `pip-sync requirements-dev.txt`
 3. `alembic upgrade head` > for migration
