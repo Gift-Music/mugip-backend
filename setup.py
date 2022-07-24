@@ -13,6 +13,7 @@ except FileNotFoundError:
 install_requires = [
     "aiofiles==0.8.0",
     "alembic==1.7.4",
+    "asyncpg==0.26.0",
     "boto3[crt]==1.24.7",
     "boto3-stubs[s3]==1.24.7",
     "fastapi==0.78.0",
@@ -39,6 +40,7 @@ dev_install_requires = [
     "asgi-lifespan==1.0.1",
     "autopep8==1.5.7",
     "bandit==1.7.0",
+    "black==22.6.0",
     "flake8-bugbear==21.4.3",
     "flake8-datetimez==20.10.0",
     "flake8-isort==4.0.0",

@@ -4,47 +4,48 @@ import datetime
 import logging
 from base64 import b64encode
 from functools import cached_property
-from typing import Any, Optional
+from typing import Any
 
 import httpx
+import msgpack
 from pydantic import BaseModel, dataclasses
 
-from app.models import services as m
-from app.utils.base_ import AppUtilBase
+from app.constants import TZ_UTC
+from app.ctx import AppCtx
+from app.models.services import Track
+
+from .misc import lazystr
 
 logger = logging.getLogger(__name__)
 
-
+REDIS_KEYSPACE = lazystr(lambda: AppCtx.current.settings.REDIS_KEY_PREFIX + ":spotify")
 SPOTIFY_AUTH_BASE_URL = "https://accounts.spotify.com"
 SPOTIFY_API_BASE_URL = "https://api.spotify.com/v1"
+SPOTIFY_AUTH_TOKEN = lazystr(
+    lambda: b64encode(
+        (
+            AppCtx.settings.SPOTIFY_CLIENT_ID
+            + ":"
+            + AppCtx.settings.SPOTIFY_CLIENT_SECRET
+        ).encode()
+    ).decode()
+)
 
 
 @dataclasses.dataclass
 class SpotifyUtilError(Exception):
     code: str
     message: str
-    detail: Optional[dict[str, Any]]
+    detail: dict[str, Any] | None = None
 
 
-class SpotifyAppUtil(AppUtilBase):
+class SpotifyApiHandler:
     _default_token: str | None = None
-    _default_token_expired_dt: datetime.datetime | None = None
+    _default_token_expired_dt: datetime.datetime = datetime.datetime.fromtimestamp(
+        0.0, tz=TZ_UTC
+    )
 
     @cached_property
-    def redis_keyspace(self) -> str:
-        return f"{self.app_settings.REDIS_KEY_PREFIX}:spotify"
-
-    @cached_property
-    def auth_token(self) -> str:
-        return b64encode(
-            (
-                self.app_settings.SPOTIFY_CLIENT_ID
-                + ":"
-                + self.app_settings.SPOTIFY_CLIENT_SECRET
-            ).encode()
-        ).decode()
-
-    @property
     async def client_credentials(self) -> str:
         if (
             self._default_token is None
@@ -56,9 +57,8 @@ class SpotifyAppUtil(AppUtilBase):
                     data={
                         "grant_type": "client_credentials",
                     },
-                    headers={"Authorization": f"Basic {self.auth_token}"},
+                    headers={"Authorization": f"Basic {SPOTIFY_AUTH_TOKEN}"},
                 )
-                print(resp.json())
 
             resp_json = resp.json()
 
@@ -67,7 +67,7 @@ class SpotifyAppUtil(AppUtilBase):
                 datetime.datetime.now() + datetime.timedelta(resp_json["expires_in"])
             )
 
-        return self._default_token
+        return self._default_token  # type: ignore
 
     async def _get_request(
         self,
@@ -91,17 +91,21 @@ class SpotifyAppUtil(AppUtilBase):
 
         return resp_model.parse_obj(resp.json())
 
-    async def get_track(self, track_id: str) -> m.Track:
-        track = self.app_context.redis.get(f"{self.redis_keyspace}:track:{track_id}")
-        return (
-            track
-            if track is not None
-            else await self._get_request(
-                f"{SPOTIFY_API_BASE_URL}/tracks/{track_id}",
-                resp_model=m.Track,
-                headers={"Authorization": f"Bearer {await self.client_credentials}"},
-            )
-        )
+    async def get_track(self, track_id: str) -> Track:
+        track_key: str = f"{REDIS_KEYSPACE}:track:{track_id}"
+        track_bytes: bytes | None = await AppCtx.current.redis.get(track_key)
+        if track_bytes is not None:
+            return Track.parse_obj(msgpack.loads(track_bytes))
+
+        track: Track = await self._get_request(
+            f"{SPOTIFY_API_BASE_URL}/tracks/{track_id}",
+            resp_model=Track,
+            headers={"Authorization": f"Bearer {await self.client_credentials}"},
+        )  # type: ignore
+
+        await AppCtx.current.redis.set(track_key, msgpack.dumps(track.dict()))
+
+        return track
 
 
 async def spotify_me_api(token: str) -> dict[str, Any]:
@@ -117,4 +121,4 @@ async def spotify_me_api(token: str) -> dict[str, Any]:
                 message="something wrong",
             )
 
-    return resp.json()
+    return resp.json()  # type: ignore

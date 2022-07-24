@@ -92,7 +92,7 @@ class UserOauthLogin(ModelBase):
         primary_key=True,
         index=True,
     )
-    user = relationship("User", uselist=False)
+    user: User = relationship("User", uselist=False)
 
     uid = Column(sqltypes.String, nullable=False, primary_key=True)
     provider_type = Column(sqltypes.Integer, nullable=False)

@@ -1,9 +1,23 @@
 from __future__ import annotations
 
 import datetime
-from typing import Any
+from typing import Any, Callable
 
 from app.constants import TZ_UTC
+
+
+class lazystr:
+    def __init__(self, func: Callable[[], str]) -> None:
+        self._func = func
+
+    def __str__(self) -> str:
+        return self._func()
+
+    def __add__(self, other: str) -> str:
+        return self._func() + other
+
+    def __mod__(self, other: str) -> str:
+        return self._func() % other
 
 
 def ts_to_dt(ts: int) -> datetime.datetime:

@@ -1,20 +1,16 @@
 import jwt
-import sqlalchemy
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr, SecretStr
-from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql import expression as sql_exp
 
+from app.ctx import AppCtx
 from app.models import postgres as m
-from app.settings import AppSettings
-from app.utils import AppUtils
 from app.utils import auth as auth_util
-from app.utils import email as email_util
 from app.utils import fastapi as fastapi_util
 from app.utils import oauth as oauth_util
-from app.utils.fastapi import (CustomAPIRouter, get_app_settings, get_app_utils,
-                               get_db_session)
+from app.utils.fastapi import CustomAPIRouter
 
 router = CustomAPIRouter(prefix="/auth", tags=["auth"])
 
@@ -27,12 +23,8 @@ class _SignUpRequest(BaseModel):
 
 
 @router.post("/signup")
-def signup_api(
-    q: _SignUpRequest,
-    app_utils: AppUtils = Depends(get_app_utils),
-    db_session: Session = Depends(get_db_session),
-) -> None:
-    is_email_exist = db_session.scalar(
+async def signup_api(q: _SignUpRequest) -> None:
+    is_email_exist = await AppCtx.current.db.session.scalar(
         sql_exp.exists().where(m.User.email == q.email).select()
     )
 
@@ -45,71 +37,20 @@ def signup_api(
     user = m.User(
         email=q.email,
         nickname=q.nickname,
-        password=auth_util.generate_hashed_password(q.password.get_secret_value()),
+        password=await auth_util.generate_hashed_password(
+            q.password.get_secret_value()
+        ),
     )
 
-    db_session.add(user)
+    AppCtx.current.db.session.add(user)
 
     try:
-        db_session.flush()
-    except sqlalchemy.exc.IntegrityError:
+        await AppCtx.current.db.session.commit()
+    except IntegrityError:
         raise fastapi_util.LogicError(
             code="try_again",
             message="there is a race condition. try again.",
         )
-
-    verify_token = app_utils.auth.issue_verify_token(q.email)
-
-    app_utils.email.send_email(
-        email_util.EmailModel(
-            to=q.email,
-            subject="Mugip 인증",
-            message=f"인증번호: {verify_token}",
-        )
-    )
-
-    db_session.commit()
-
-
-class _VerifyEmailRequest(BaseModel):
-    email: EmailStr
-    token: str
-
-
-class _VerifyEmailResponse(BaseModel):
-    access_token: str
-    refresh_token: str
-
-
-@router.post("/verify/email")
-def verify_token_api(
-    q: _VerifyEmailRequest,
-    app_utils: AppUtils = Depends(get_app_utils),
-    db_session: Session = Depends(get_db_session),
-) -> _VerifyEmailResponse:
-    email = app_utils.auth.get_verify_token(q.token)
-
-    if email != q.email:
-        raise fastapi_util.LogicError(
-            code="invalid_token", message="this token is not valid"
-        )
-
-    app_utils.auth.delete_verify_token(q.token)
-
-    user = db_session.query(m.User).filter(m.User.email == q.email).one_or_none()
-
-    if user is None:
-        raise fastapi_util.LogicError(
-            code="not_found_user",
-            message="failed to found user by this email",
-        )
-
-    access_token, refresh_token = app_utils.auth.generate_token(user.id)
-
-    return _VerifyEmailResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-    )
 
 
 class _LoginRequest(BaseModel):
@@ -123,12 +64,14 @@ class _LoginResponse(BaseModel):
 
 
 @router.post("/login")
-def login_api(
-    q: _LoginRequest,
-    app_utils: AppUtils = Depends(get_app_utils),
-    db_session: Session = Depends(get_db_session),
-) -> _LoginResponse:
-    user = db_session.query(m.User).filter(m.User.email == q.email).one_or_none()
+async def login_api(q: _LoginRequest) -> _LoginResponse:
+    user: m.User | None = (
+        await AppCtx.current.db.session.execute(
+            sql_exp
+            .select(m.User)
+            .where(m.User.email == q.email)
+        )
+    ).scalar_one_or_none()
 
     if user is None:
         raise fastapi_util.LogicError(
@@ -144,7 +87,9 @@ def login_api(
             code="invalid_password", message="this password is not valid"
         )
 
-    access_token, refresh_token = app_utils.auth.generate_token(user.id)
+    access_token, refresh_token = await auth_util.generate_token(
+        user.id  # type: ignore
+    )
 
     return _LoginResponse(
         access_token=access_token,
@@ -153,12 +98,14 @@ def login_api(
 
 
 @router.post("/login/oauth")
-def login_oauth_api(
-    q: OAuth2PasswordRequestForm = Depends(),
-    app_utils: AppUtils = Depends(get_app_utils),
-    db_session: Session = Depends(get_db_session),
-) -> _LoginResponse:
-    user = db_session.query(m.User).filter(m.User.email == q.username).one_or_none()
+async def login_oauth_api(q: OAuth2PasswordRequestForm = Depends()) -> _LoginResponse:
+    user: m.User | None = (
+        await AppCtx.current.db.session.execute(
+            sql_exp
+            .select(m.User)
+            .where(m.User.email == q.username)
+        )
+    ).scalar_one_or_none()
 
     if user is None:
         raise fastapi_util.LogicError(
@@ -174,7 +121,9 @@ def login_oauth_api(
             code="invalid_password", message="this password is not valid"
         )
 
-    access_token, refresh_token = app_utils.auth.generate_token(user.id)
+    access_token, refresh_token = await auth_util.generate_token(
+        user.id  # type: ignore
+    )
 
     return _LoginResponse(
         access_token=access_token,
@@ -185,7 +134,7 @@ def login_oauth_api(
 class _SocialSignUpRequest(BaseModel):
     code: str
     redirect_uri: str
-    provider_type: int
+    provider_type: oauth_util.ProviderTypeEnum
 
 
 class _SocialSignUpResponse(BaseModel):
@@ -196,21 +145,17 @@ class _SocialSignUpResponse(BaseModel):
 
 
 @router.post("/signup/social")
-async def social_signup_api(
-    q: _SocialSignUpRequest,
-    app_utils: AppUtils = Depends(get_app_utils),
-    db_session: Session = Depends(get_db_session),
-) -> _SocialSignUpResponse:
+async def social_signup_api(q: _SocialSignUpRequest) -> _SocialSignUpResponse:
     try:
         (
             social_access_token,
             social_refresh_token,
-        ) = await app_utils.social.get_social_token(
+        ) = await oauth_util.get_social_token(
             q.code,
             q.redirect_uri,
             q.provider_type,
         )
-        social_info = await app_utils.social.get_social_info(
+        social_info = await oauth_util.get_social_info(
             social_access_token, q.provider_type
         )
     except oauth_util.OauthUtilError as ex:
@@ -219,8 +164,9 @@ async def social_signup_api(
             message=ex.message,
         )
 
-    is_oauth_login_exists: bool = db_session.scalar(
-        sql_exp.exists()
+    is_oauth_login_exists: bool = await AppCtx.current.db.session.scalar(
+        sql_exp
+        .exists()
         .where(
             (m.UserOauthLogin.uid == social_info.uid)
             & (m.UserOauthLogin.provider_type == q.provider_type)
@@ -245,12 +191,14 @@ async def social_signup_api(
         provider_type=q.provider_type,
     )
 
-    db_session.add(user)
-    db_session.add(user_oauth_login)
+    AppCtx.current.db.session.add(user)
+    AppCtx.current.db.session.add(user_oauth_login)
 
-    db_session.commit()
+    await AppCtx.current.db.session.commit()
 
-    access_token, refresh_token = app_utils.auth.generate_token(user.id)
+    access_token, refresh_token = await auth_util.generate_token(
+        user.id  # type: ignore
+    )
 
     return _SocialSignUpResponse(
         access_token=access_token,
@@ -274,18 +222,14 @@ class _SocialLoginResponse(BaseModel):
 
 
 @router.post("/login/social")
-async def social_login_api(
-    q: _SocialLoginRequest,
-    app_utils: AppUtils = Depends(get_app_utils),
-    db_session: Session = Depends(get_db_session),
-) -> _SocialLoginResponse:
-    social_access_token, social_refresh_token = await app_utils.social.get_social_token(
+async def social_login_api(q: _SocialLoginRequest) -> _SocialLoginResponse:
+    social_access_token, social_refresh_token = await oauth_util.get_social_token(
         q.code,
         q.redirect_uri,
         q.provider_type,
     )
     try:
-        social_info = await app_utils.social.get_social_info(
+        social_info = await oauth_util.get_social_info(
             social_access_token, q.provider_type
         )
     except oauth_util.OauthUtilError as ex:
@@ -295,15 +239,17 @@ async def social_login_api(
             detail=ex.detail,
         )
 
-    user = (
-        db_session.query(m.User)
-        .join(m.User.user_oauth_logins)
-        .filter(
-            (m.UserOauthLogin.uid == social_info.uid)
-            & (m.UserOauthLogin.provider_type == q.provider_type)
+    user: m.User | None = (
+        await AppCtx.current.db.session.execute(
+            sql_exp
+            .select(m.User)
+            .join(m.User.user_oauth_logins)
+            .where(
+                (m.UserOauthLogin.uid == social_info.uid)
+                & (m.UserOauthLogin.provider_type == q.provider_type)
+            )
         )
-        .one_or_none()
-    )
+    ).scalar_one_or_none()
 
     if user is None:
         raise fastapi_util.LogicError(
@@ -311,7 +257,7 @@ async def social_login_api(
             message="failed to found user by this email",
         )
 
-    access_token, refresh_token = app_utils.auth.generate_token(user.id)
+    access_token, refresh_token = auth_util.generate_token(user.id)
 
     return _SocialLoginResponse(
         access_token=access_token,
@@ -326,16 +272,11 @@ class _AuthRefreshApiRequest(BaseModel):
 
 
 @router.post("/refresh")
-def refresh_api(
-    q: _AuthRefreshApiRequest,
-    app_utils: AppUtils = Depends(get_app_utils),
-    app_settings: AppSettings = Depends(get_app_settings),
-    db_session: Session = Depends(get_db_session),
-) -> _LoginResponse:
+async def refresh_api(q: _AuthRefreshApiRequest) -> _LoginResponse:
     try:
         token_info = jwt.decode(
             jwt=q.refresh_token,
-            key=app_settings.SECRET_KEY,
+            key=AppCtx.current.settings.SECRET_KEY,
             algorithms=["HS256"],
         )
     except jwt.ExpiredSignatureError:
@@ -356,7 +297,7 @@ def refresh_api(
             message="token structure is invalid",
         )
 
-    is_user_exist: bool = db_session.scalar(
+    is_user_exist: bool = await AppCtx.current.db.session.scalar(
         sql_exp.exists().where(m.User.id == user_id).select()
     )
     if not is_user_exist:
@@ -365,7 +306,7 @@ def refresh_api(
             message="user is not exists",
         )
 
-    access_token, refresh_token = app_utils.auth.generate_token(user_id)
+    access_token, refresh_token = auth_util.generate_token(user_id)
 
     return _LoginResponse(
         access_token=access_token,
@@ -379,11 +320,7 @@ class _GuestLoginRequest(BaseModel):
 
 
 @router.post("/login/guest")
-def guest_login_api(
-    q: _GuestLoginRequest,
-    app_utils: AppUtils = Depends(get_app_utils),
-    db_session: Session = Depends(get_db_session),
-) -> _LoginResponse:
+async def guest_login_api(q: _GuestLoginRequest) -> _LoginResponse:
     user = m.User(
         nickname=q.nickname,
         password=auth_util.generate_hashed_password(
@@ -391,10 +328,10 @@ def guest_login_api(
         ),
     )
 
-    db_session.add(user)
-    db_session.commit()
+    AppCtx.current.db.session.add(user)
+    await AppCtx.current.db.session.commit()
 
-    access_token, refresh_token = app_utils.auth.generate_token(user.id)
+    access_token, refresh_token = auth_util.generate_token(user.id)
 
     return _LoginResponse(
         access_token=access_token,

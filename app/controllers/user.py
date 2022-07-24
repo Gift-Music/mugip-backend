@@ -14,7 +14,8 @@ from sqlalchemy.sql import expression as sql_exp
 import app.models.postgres as m
 from app.utils import AppUtils
 from app.utils.auth import user_auth_required
-from app.utils.fastapi import CustomAPIRouter, LogicError, get_app_utils, get_db_session
+from app.utils.fastapi import (AppCtx.current.db.session, CustomAPIRouter, LogicError,
+                               get_app_utils, get_await)
 from app.utils.filter_expr import build_filter_expr
 
 router = CustomAPIRouter(prefix="/user", tags=["user"])
@@ -28,10 +29,10 @@ class _UserPutRequest(BaseModel):
 @router.put("/")
 async def user_put_me_api(
     q: _UserPutRequest,
-    db_session: Session = Depends(get_db_session),
+    await AppCtx.current.db.session: Session = Depends(get_await AppCtx.current.db.session),
     me_user_id: int = Depends(user_auth_required),
 ) -> None:
-    user = db_session.query(m.User).filter(m.User.id == me_user_id).one()
+    user = await AppCtx.current.db.session.query(m.User).filter(m.User.id == me_user_id).one()
 
     user.nickname = q.nickname
 
@@ -40,9 +41,9 @@ async def user_put_me_api(
             user=user,
             profile_image_url=q.profile_image_url,
         )
-        db_session.add(profile_image)
+        AppCtx.current.db.session.add(profile_image)
 
-    db_session.commit()
+    await AppCtx.current.db.session.commit()
 
 
 class _UserGetResponse(BaseModel):
@@ -57,10 +58,10 @@ class _UserGetResponse(BaseModel):
 
 @router.get("/")
 async def user_get_me_api(
-    db_session: Session = Depends(get_db_session),
+    await AppCtx.current.db.session: Session = Depends(get_await AppCtx.current.db.session),
     me_user_id: int = Depends(user_auth_required),
 ) -> _UserGetResponse:
-    user = db_session.query(m.User).filter(m.User.id == me_user_id).one()
+    user = await AppCtx.current.db.session.query(m.User).filter(m.User.id == me_user_id).one()
 
     return _UserGetResponse.from_orm(user)
 
@@ -68,10 +69,10 @@ async def user_get_me_api(
 @router.get("/{user_id:int}")
 async def user_get_api(
     user_id: int,
-    db_session: Session = Depends(get_db_session),
+    await AppCtx.current.db.session: Session = Depends(get_await AppCtx.current.db.session),
     me_user_id: int = Depends(user_auth_required),
 ) -> _UserGetResponse:
-    user = db_session.query(m.User).filter(m.User.id == user_id).one_or_none()
+    user = await AppCtx.current.db.session.query(m.User).filter(m.User.id == user_id).one_or_none()
 
     if user is None:
         raise LogicError(
@@ -85,13 +86,13 @@ async def user_get_api(
 @router.post("/profile_image")
 async def user_profile_image_post_api(
     profile_file: UploadFile = File(),
-    db_session: Session = Depends(get_db_session),
+    await AppCtx.current.db.session: Session = Depends(get_await AppCtx.current.db.session),
     me_user_id: int = Depends(user_auth_required),
     app_utils: AppUtils = Depends(get_app_utils),
 ) -> None:
     current_dt = datetime.now().isoformat()
 
-    user = db_session.query(m.User).filter(m.User.id == me_user_id).one_or_none()
+    user = await AppCtx.current.db.session.query(m.User).filter(m.User.id == me_user_id).one_or_none()
 
     if user is None:
         raise LogicError(
@@ -134,14 +135,14 @@ async def user_profile_image_post_api(
             detail={"ex": str(ex)},
         )
 
-    db_session.add(
+    AppCtx.current.db.session.add(
         m.UserProfileImageLog(
             profile_image_url=profile_image_url,
             user=user,
         )
     )
 
-    db_session.commit()
+    await AppCtx.current.db.session.commit()
 
 
 _UserSearchRequestFilterExpr = build_filter_expr(
@@ -191,10 +192,10 @@ class _UserSearchResponse(BaseModel):
 async def user_search_post_api(
     q: _UserSearchRequest,
     response: Response,
-    db_session: Session = Depends(get_db_session),
+    await AppCtx.current.db.session: Session = Depends(get_await AppCtx.current.db.session),
     me_user_id: int = Depends(user_auth_required),
 ) -> List[_UserSearchResponse]:
-    users_query = db_session.query(m.User)
+    users_query = await AppCtx.current.db.session.query(m.User)
 
     if q.filter_expr is not None:
         users_query = users_query.filter(
@@ -237,11 +238,11 @@ async def user_followers_get_api(
     response: Response,
     offset: int = 0,
     count: int = 100,
-    db_session: Session = Depends(get_db_session),
+    await AppCtx.current.db.session: Session = Depends(get_await AppCtx.current.db.session),
     me_user_id: int = Depends(user_auth_required),
 ) -> List[_UserSearchResponse]:
     followers_query: Query[m.User] = (
-        db_session.query(m.User)
+        await AppCtx.current.db.session.query(m.User)
         .join(m.UserFollow, (m.User.id == m.UserFollow.request_user_id))
         .filter(m.UserFollow.target_user_id == me_user_id)
     )
@@ -259,11 +260,11 @@ async def user_followings_get_api(
     response: Response,
     offset: int = 0,
     count: int = 100,
-    db_session: Session = Depends(get_db_session),
+    await AppCtx.current.db.session: Session = Depends(get_await AppCtx.current.db.session),
     me_user_id: int = Depends(user_auth_required),
 ) -> List[_UserSearchResponse]:
     followings_query: Query[m.User] = (
-        db_session.query(m.User)
+        await AppCtx.current.db.session.query(m.User)
         .join(
             m.UserFollow,
             (m.User.id == m.UserFollow.target_user_id),
@@ -286,10 +287,10 @@ class _UserFollowPostRequset(BaseModel):
 @router.post("/follow")
 def follow_post_api(
     q: _UserFollowPostRequset,
-    db_session: Session = Depends(get_db_session),
+    await AppCtx.current.db.session: Session = Depends(get_await AppCtx.current.db.session),
     me_user_id: int = Depends(user_auth_required),
 ) -> None:
-    is_target_user_exist: bool = db_session.scalar(
+    is_target_user_exist: bool = await AppCtx.current.db.session.scalar(
         sql_exp.exists().where(m.User.id == q.target_user_id).select()
     )
 
@@ -299,20 +300,20 @@ def follow_post_api(
             message="failed to found user by this id",
         )
 
-    db_session.add(
+    AppCtx.current.db.session.add(
         m.UserFollow(
             request_user_id=me_user_id,
             target_user_id=q.target_user_id,
         )
     )
 
-    db_session.commit()
+    await AppCtx.current.db.session.commit()
 
 
 @router.delete("/")
 def delete_all(
-    db_session: Session = Depends(get_db_session),
+    await AppCtx.current.db.session: Session = Depends(get_await AppCtx.current.db.session),
 ) -> None:
-    db_session.query(m.User).delete()
+    await AppCtx.current.db.session.query(m.User).delete()
 
-    db_session.commit()
+    await AppCtx.current.db.session.commit()

@@ -16,7 +16,7 @@ from app.models import postgres as m
 from app.utils import AppUtils
 from app.utils import fastapi as fastapi_util
 from app.utils.auth import user_auth_required
-from app.utils.fastapi import get_app_utils, get_db_session
+from app.utils.fastapi import AppCtx.current.db.session, get_app_utils, get_await
 from app.utils.filter_expr import build_filter_expr
 
 router = fastapi_util.CustomAPIRouter(prefix="/digging_log", tags=["digging_log"])
@@ -31,16 +31,16 @@ class _DiggingLogPostRequest(BaseModel):
 @router.post("/")
 async def digging_log_post_api(
     q: _DiggingLogPostRequest,
-    db_session: Session = Depends(get_db_session),
+    await AppCtx.current.db.session: Session = Depends(get_await AppCtx.current.db.session),
     app_utils: AppUtils = Depends(get_app_utils),
     me_user_id: int = Depends(user_auth_required),
 ) -> None:
-    track = db_session.query(m.Track).filter(m.Track.id == q.track_id).one_or_none()
+    track = await AppCtx.current.db.session.query(m.Track).filter(m.Track.id == q.track_id).one_or_none()
 
     if track is None:
         track_obj = await app_utils.spotify.get_track(q.track_id)
         album = (
-            db_session.query(m.Album)
+            await AppCtx.current.db.session.query(m.Album)
             .filter(m.Album.id == track_obj.album.id)
             .one_or_none()
         )
@@ -63,10 +63,10 @@ async def digging_log_post_api(
             for image in track_obj.album.images
         ]
 
-        db_session.add(album)
-        db_session.add_all(images)
+        AppCtx.current.db.session.add(album)
+        await AppCtx.current.db.session.add_all(images)
 
-        db_session.execute(
+        await AppCtx.current.db.session.execute(
             pg_insert(m.Artist.__table__)
             .values(
                 [
@@ -93,10 +93,10 @@ async def digging_log_post_api(
             )
             for artist in track_obj.artists
         ]
-        db_session.add(track)
-        db_session.add_all(artist_tracks)
+        AppCtx.current.db.session.add(track)
+        await AppCtx.current.db.session.add_all(artist_tracks)
 
-    tag = db_session.query(m.Tag).filter(m.Tag.name == q.tag_name).one_or_none()
+    tag = await AppCtx.current.db.session.query(m.Tag).filter(m.Tag.name == q.tag_name).one_or_none()
 
     if tag is None:
         raise fastapi_util.LogicError(
@@ -104,7 +104,7 @@ async def digging_log_post_api(
             message="failed to found tag by this name",
         )
 
-    user = db_session.query(m.User).filter(m.User.id == me_user_id).one_or_none()
+    user = await AppCtx.current.db.session.query(m.User).filter(m.User.id == me_user_id).one_or_none()
 
     if user is None:
         raise fastapi_util.LogicError(
@@ -122,16 +122,16 @@ async def digging_log_post_api(
         coordinates=coordinates,
     )
 
-    db_session.add(digging_log)
+    AppCtx.current.db.session.add(digging_log)
 
-    db_session.add(
+    AppCtx.current.db.session.add(
         m.DiggingLogTag(
             digging_log=digging_log,
             tag=tag,
         )
     )
 
-    db_session.commit()
+    await AppCtx.current.db.session.commit()
 
 
 _DiggingLogSearchRequestFilterExpr = build_filter_expr(
@@ -233,11 +233,11 @@ _DiggingLogSearchResponse.Artist.update_forward_refs()
 def digging_log_search_api(
     q: _DiggingLogSearchRequest,
     response: Response,
-    db_session: Session = Depends(get_db_session),
+    await AppCtx.current.db.session: Session = Depends(get_await AppCtx.current.db.session),
     me_user_id: int = Depends(user_auth_required),
 ) -> List[_DiggingLogSearchResponse]:
     digging_logs_query = (
-        db_session.query(m.DiggingLog)
+        await AppCtx.current.db.session.query(m.DiggingLog)
         .join(m.DiggingLog.digging_log_tags)
         .options(
             contains_eager(m.DiggingLog.digging_log_tags),

@@ -4,7 +4,8 @@ import uuid
 from typing import Any, Callable, NamedTuple
 
 from sqlalchemy.sql import expression as sql_exp
-from sqlalchemy.sql.expression import BooleanClauseList, ClauseElement
+from sqlalchemy.sql.elements import BooleanClauseList
+from sqlalchemy.sql.expression import ClauseElement
 
 
 class FilterExpr(NamedTuple):
@@ -46,7 +47,9 @@ def _filter_expr_to_query(
         elif key == "$not":
             assert isinstance(value_or_exprs, dict)
             expr_list.append(
-                sql_exp.not_(_filter_expr_to_query(value_or_exprs, key_func_dict))
+                sql_exp.not_(
+                    _filter_expr_to_query(value_or_exprs, key_func_dict)
+                )  # type: ignore
             )
         elif key in key_func_dict:
             expr_list.append(key_func_dict[key](value_or_exprs))
