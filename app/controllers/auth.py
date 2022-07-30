@@ -67,9 +67,7 @@ class _LoginResponse(BaseModel):
 async def login_api(q: _LoginRequest) -> _LoginResponse:
     user: m.User | None = (
         await AppCtx.current.db.session.execute(
-            sql_exp
-            .select(m.User)
-            .where(m.User.email == q.email)
+            sql_exp.select(m.User).where(m.User.email == q.email)
         )
     ).scalar_one_or_none()
 
@@ -101,9 +99,7 @@ async def login_api(q: _LoginRequest) -> _LoginResponse:
 async def login_oauth_api(q: OAuth2PasswordRequestForm = Depends()) -> _LoginResponse:
     user: m.User | None = (
         await AppCtx.current.db.session.execute(
-            sql_exp
-            .select(m.User)
-            .where(m.User.email == q.username)
+            sql_exp.select(m.User).where(m.User.email == q.username)
         )
     ).scalar_one_or_none()
 
@@ -165,8 +161,7 @@ async def social_signup_api(q: _SocialSignUpRequest) -> _SocialSignUpResponse:
         )
 
     is_oauth_login_exists: bool = await AppCtx.current.db.session.scalar(
-        sql_exp
-        .exists()
+        sql_exp.exists()
         .where(
             (m.UserOauthLogin.uid == social_info.uid)
             & (m.UserOauthLogin.provider_type == q.provider_type)
@@ -241,8 +236,7 @@ async def social_login_api(q: _SocialLoginRequest) -> _SocialLoginResponse:
 
     user: m.User | None = (
         await AppCtx.current.db.session.execute(
-            sql_exp
-            .select(m.User)
+            sql_exp.select(m.User)
             .join(m.User.user_oauth_logins)
             .where(
                 (m.UserOauthLogin.uid == social_info.uid)

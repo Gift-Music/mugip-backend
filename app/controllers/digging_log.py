@@ -8,15 +8,16 @@ from fastapi import Depends, Response
 from geoalchemy2 import WKTElement
 from pydantic import BaseModel, Field, validator
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.orm import Session, contains_eager, joinedload
+from sqlalchemy.orm import contains_eager, joinedload
 from sqlalchemy.sql import expression as sql_exp
+from sqlalchemy.sql import func as sql_func
 
 from app.constants import DEFAULT_SRID
+from app.ctx import AppCtx
 from app.models import postgres as m
-from app.utils import AppUtils
 from app.utils import fastapi as fastapi_util
+from app.utils import spotify as spotify_util
 from app.utils.auth import user_auth_required
-from app.utils.fastapi import AppCtx.current.db.session, get_app_utils, get_await
 from app.utils.filter_expr import build_filter_expr
 
 router = fastapi_util.CustomAPIRouter(prefix="/digging_log", tags=["digging_log"])
@@ -31,19 +32,21 @@ class _DiggingLogPostRequest(BaseModel):
 @router.post("/")
 async def digging_log_post_api(
     q: _DiggingLogPostRequest,
-    await AppCtx.current.db.session: Session = Depends(get_await AppCtx.current.db.session),
-    app_utils: AppUtils = Depends(get_app_utils),
     me_user_id: int = Depends(user_auth_required),
 ) -> None:
-    track = await AppCtx.current.db.session.query(m.Track).filter(m.Track.id == q.track_id).one_or_none()
+    track: m.Track = (
+        await AppCtx.current.db.session.execute(
+            sql_exp.select(m.Track).where(m.Track.id == q.track_id)
+        )
+    ).scalar_one_or_none()
 
     if track is None:
-        track_obj = await app_utils.spotify.get_track(q.track_id)
-        album = (
-            await AppCtx.current.db.session.query(m.Album)
-            .filter(m.Album.id == track_obj.album.id)
-            .one_or_none()
-        )
+        track_obj = await spotify_util.get_track(q.track_id)
+        album: m.Album = (
+            await AppCtx.current.db.session.execute(
+                sql_exp.select(m.Album).where(m.Album.id == track_obj.album.id)
+            )
+        ).scalar_one_or_none()
 
         if album is None:
             album = m.Album(
@@ -96,7 +99,11 @@ async def digging_log_post_api(
         AppCtx.current.db.session.add(track)
         await AppCtx.current.db.session.add_all(artist_tracks)
 
-    tag = await AppCtx.current.db.session.query(m.Tag).filter(m.Tag.name == q.tag_name).one_or_none()
+    tag = (
+        await AppCtx.current.db.session.query(m.Tag)
+        .filter(m.Tag.name == q.tag_name)
+        .one_or_none()
+    )
 
     if tag is None:
         raise fastapi_util.LogicError(
@@ -104,7 +111,11 @@ async def digging_log_post_api(
             message="failed to found tag by this name",
         )
 
-    user = await AppCtx.current.db.session.query(m.User).filter(m.User.id == me_user_id).one_or_none()
+    user = (
+        await AppCtx.current.db.session.query(m.User)
+        .filter(m.User.id == me_user_id)
+        .one_or_none()
+    )
 
     if user is None:
         raise fastapi_util.LogicError(
@@ -230,14 +241,13 @@ _DiggingLogSearchResponse.Artist.update_forward_refs()
 
 
 @router.post("/search")
-def digging_log_search_api(
+async def digging_log_search_api(
     q: _DiggingLogSearchRequest,
     response: Response,
-    await AppCtx.current.db.session: Session = Depends(get_await AppCtx.current.db.session),
     me_user_id: int = Depends(user_auth_required),
 ) -> List[_DiggingLogSearchResponse]:
     digging_logs_query = (
-        await AppCtx.current.db.session.query(m.DiggingLog)
+        sql_exp.select(m.DiggingLog)
         .join(m.DiggingLog.digging_log_tags)
         .options(
             contains_eager(m.DiggingLog.digging_log_tags),
@@ -246,7 +256,7 @@ def digging_log_search_api(
     )
 
     if q.filter_expr is not None:
-        digging_logs_query = digging_logs_query.filter(
+        digging_logs_query = digging_logs_query.where(
             _DiggingLogSearchRequestFilterExpr.to_query(
                 q.filter_expr,
                 {
@@ -267,12 +277,20 @@ def digging_log_search_api(
         "desc": sql_exp.desc,
     }[q.sort_by_order or "asc"]
 
-    digging_logs_count = digging_logs_query.count()
+    digging_logs_count = await AppCtx.current.db.session.scalar(
+        sql_func.count(digging_logs_query)
+    )
     response.headers["x-total"] = str(digging_logs_count)
 
-    digging_logs = (
-        digging_logs_query.order_by(sort_by_order_exp(sort_by_col))
-        .slice(q.offset, q.offset + q.count)
+    digging_logs: list[m.DiggingLog] = (
+        (
+            await AppCtx.current.db.session.execute(
+                digging_logs_query.order_by(sort_by_order_exp(sort_by_col)).slice(
+                    q.offset, q.offset + q.count
+                )
+            )
+        )
+        .scalars()
         .all()
     )
 

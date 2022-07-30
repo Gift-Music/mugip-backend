@@ -16,9 +16,7 @@ async def ping_get_api(
     request: Request,
 ) -> JSONResponse:
     try:
-        if (
-            await AppCtx.current.db.session.execute(text("SELECT 1"))
-        ).scalar() != 1:
+        if (await AppCtx.current.db.session.execute(text("SELECT 1"))).scalar() != 1:
             raise RuntimeError("postgresql ping failure")
 
         if not await AppCtx.current.redis.ping():
