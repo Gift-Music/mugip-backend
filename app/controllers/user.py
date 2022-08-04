@@ -102,17 +102,15 @@ async def user_get_api(
 @router.post("/profile_image")
 async def user_profile_image_post_api(
     profile_file: UploadFile = File(),
-    # await AppCtx.current.db.session: Session = Depends(get_await AppCtx.current.db.session),
     me_user_id: int = Depends(user_auth_required),
     # app_utils: AppUtils = Depends(get_app_utils),
 ) -> None:
     current_dt = datetime.now().isoformat()
-
-    user = (
-        await AppCtx.current.db.session.query(m.User)
-        .filter(m.User.id == me_user_id)
-        .one_or_none()
-    )
+    user: m.User = (
+        await AppCtx.current.db.session.execute(
+            sql_exp.select(m.User).where(m.User.id == me_user_id)
+        )
+    ).scalar_one_or_none()
 
     if user is None:
         raise LogicError(
