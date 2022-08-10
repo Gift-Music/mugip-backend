@@ -4,15 +4,13 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr, SecretStr
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql import expression as sql_exp
-
-from app.ctx import AppCtx
 from app.models import postgres as m
+from app.ctx import AppCtx
 from app.utils import auth as auth_util
-from app.utils import fastapi as fastapi_util
 from app.utils import oauth as oauth_util
-from app.utils.fastapi import CustomAPIRouter
+from app.utils import fastapi as fastapi_util
 
-router = CustomAPIRouter(prefix="/auth", tags=["auth"])
+router = fastapi_util.CustomAPIRouter(prefix="/auth", tags=["auth"])
 
 
 class _SignUpRequest(BaseModel):
@@ -24,8 +22,8 @@ class _SignUpRequest(BaseModel):
 
 @router.post("/signup")
 async def signup_api(q: _SignUpRequest) -> None:
-    is_email_exist = await AppCtx.current.db.session.scalar(
-        sql_exp.exists().where(m.User.email == q.email).select()
+    is_email_exist: m.User = await AppCtx.current.db.session.execute(
+        sql_exp.select(m.User).where(m.User.email == q.email)
     )
 
     if is_email_exist:
@@ -294,6 +292,7 @@ async def refresh_api(q: _AuthRefreshApiRequest) -> _LoginResponse:
     is_user_exist: bool = await AppCtx.current.db.session.scalar(
         sql_exp.exists().where(m.User.id == user_id).select()
     )
+
     if not is_user_exist:
         raise fastapi_util.AuthError(
             code="user_deleted",
