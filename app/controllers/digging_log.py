@@ -99,11 +99,11 @@ async def digging_log_post_api(
         AppCtx.current.db.session.add(track)
         await AppCtx.current.db.session.add_all(artist_tracks)
 
-    tag = (
-        await AppCtx.current.db.session.query(m.Tag)
-        .filter(m.Tag.name == q.tag_name)
-        .one_or_none()
-    )
+    tag: m.Tag = (
+        await AppCtx.current.db.session.execute(
+            sql_exp.select(m.Tag).where(m.Tag.name == q.tag_name)
+        )
+    ).scalar_one_or_none()
 
     if tag is None:
         raise fastapi_util.LogicError(
@@ -111,11 +111,11 @@ async def digging_log_post_api(
             message="failed to found tag by this name",
         )
 
-    user = (
-        await AppCtx.current.db.session.query(m.User)
-        .filter(m.User.id == me_user_id)
-        .one_or_none()
-    )
+    user: m.User = (
+        await AppCtx.current.db.session.execute(
+            sql_exp.select(m.User).where(m.User.id == me_user_id)
+        )
+    ).scalar_one_or_none()
 
     if user is None:
         raise fastapi_util.LogicError(
@@ -246,7 +246,7 @@ async def digging_log_search_api(
     response: Response,
     me_user_id: int = Depends(user_auth_required),
 ) -> List[_DiggingLogSearchResponse]:
-    digging_logs_query = (
+    digging_logs_query: m.DiggingLog = await AppCtx.current.db.session.execute(
         sql_exp.select(m.DiggingLog)
         .join(m.DiggingLog.digging_log_tags)
         .options(
