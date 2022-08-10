@@ -3,13 +3,11 @@ from typing import Any, Dict, List, Literal, Optional
 import jsonschema
 from fastapi import Depends, Response
 from pydantic import BaseModel, Field, validator
-from sqlalchemy.orm import Session
 from sqlalchemy.sql import expression as sql_exp
-
 from app.models import postgres as m
+from app.ctx import AppCtx
 from app.utils import fastapi as fastapi_util
 from app.utils.auth import user_auth_required
-from app.utils.fastapi import AppCtx.current.db.session, get_await
 from app.utils.filter_expr import build_filter_expr
 
 router = fastapi_util.CustomAPIRouter(prefix="/tag", tags=["tag"])
@@ -23,7 +21,6 @@ class _TagPostRequest(BaseModel):
 @router.post("/")
 def tag_post_api(
     q: _TagPostRequest,
-    await AppCtx.current.db.session: Session = Depends(get_await AppCtx.current.db.session),
     _: int = Depends(user_auth_required),
 ) -> None:
     is_tag_exists: bool = await AppCtx.current.db.session.scalar(
@@ -90,10 +87,9 @@ class _TagSearchResponse(BaseModel):
 def tag_search_api(
     q: _TagSearchRequest,
     response: Response,
-    await AppCtx.current.db.session: Session = Depends(get_await AppCtx.current.db.session),
     _: int = Depends(user_auth_required),
 ) -> List[_TagSearchResponse]:
-    tags_query = await AppCtx.current.db.session.query(m.Tag)
+    tags_query: m.Tag = await AppCtx.current.db.session.execute(sql_exp.select(m.Tag))
 
     if q.filter_expr is not None:
         tags_query = tags_query.filter(
@@ -119,9 +115,15 @@ def tag_search_api(
     tags_count = tags_query.count()
     response.headers["x-total"] = str(tags_count)
 
-    tags = (
-        tags_query.order_by(sort_by_order_exp(sort_by_col))  # type: ignore
-        .slice(q.offset, q.offset + q.count)
+    tags: list[m.Tag] = (
+        (
+            await AppCtx.current.db.session.execute(
+                tags_query.order_by(sort_by_order_exp(sort_by_col)).slice(
+                    q.offset, q.offset + q.count
+                )
+            )
+        )
+        .scalar()
         .all()
     )
 
