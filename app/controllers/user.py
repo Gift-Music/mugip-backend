@@ -8,24 +8,15 @@ import pydantic
 from fastapi import Depends, File, Response, UploadFile
 from PIL import Image
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Query
 from sqlalchemy.sql import expression as sql_exp
-
 import app.models.postgres as m
-from app.utils import AppUtils
 from app.utils.auth import user_auth_required
-
-# from app.utils.fastapi import (AppCtx.current.db.session, CustomAPIRouter, LogicError, get_app_utils, get_await)
-
-# CustomAPIRouter
-# LogicError
-# get_app_utils
-# get_await
-
-
+from app.ctx import AppCtx
+from app.utils import remote_file as remote_file_util
+from app.utils import fastapi as fastapi_uitl
 from app.utils.filter_expr import build_filter_expr
 
-router = CustomAPIRouter(prefix="/user", tags=["user"])
+router = fastapi_uitl.CustomAPIRouter(prefix="/user", tags=["user"])
 
 
 class _UserPutRequest(BaseModel):
@@ -74,7 +65,7 @@ async def user_get_me_api(
         await AppCtx.current.db.session.execute(
             sql_exp.select(m.User).where(m.User.id == me_user_id)
         )
-    ).scalar()
+    ).scalar_one()
 
     return _UserGetResponse.from_orm(user)
 
@@ -91,7 +82,7 @@ async def user_get_api(
     ).scalar_one_or_none()
 
     if user is None:
-        raise LogicError(
+        raise fastapi_uitl.LogicError(
             code="not_found_user",
             message="failed to found user by this id",
         )
@@ -103,7 +94,6 @@ async def user_get_api(
 async def user_profile_image_post_api(
     profile_file: UploadFile = File(),
     me_user_id: int = Depends(user_auth_required),
-    # app_utils: AppUtils = Depends(get_app_utils),
 ) -> None:
     current_dt = datetime.now().isoformat()
     user: m.User = (
@@ -113,7 +103,7 @@ async def user_profile_image_post_api(
     ).scalar_one_or_none()
 
     if user is None:
-        raise LogicError(
+        raise fastapi_uitl.LogicError(
             code="not_found_user",
             message="failed to found user by this id",
         )
@@ -134,21 +124,20 @@ async def user_profile_image_post_api(
 
             f.seek(0)
 
-            # app_utils -> 삭제
             file_name = f"{me_user_id}_{current_dt}_{profile_file.filename}"
-            profile_image_url = app_utils.remote_file.upload_profile_image(
+            profile_image_url = remote_file_util.upload_profile_image(
                 file_name,
                 f,
             )
 
     except RuntimeError as ex:
-        raise LogicError(
+        raise fastapi_uitl.LogicError(
             code="profile_file_upload_error",
             message=ex.msg,
             detail={"aws_error": ex.detail},
         )
     except Exception as ex:
-        raise LogicError(
+        raise fastapi_uitl.LogicError(
             code="cannot_open_profile",
             message="you cannot open profile image",
             detail={"ex": str(ex)},
@@ -244,9 +233,15 @@ async def user_search_post_api(
     users_count = users_query.count()
     response.headers["x-total"] = str(users_count)
 
-    users = (
-        users_query.order_by(sort_by_order_exp(sort_by_col))
-        .slice(q.offset, q.offset + q.count)
+    users: list[m.User] = (
+        (
+            await AppCts.current.db.session.execute(
+                users_query.order_by(sort_by_order_exp(sort_by_col)).slice(
+                    q.offset, q.offset + q.count
+                )
+            )
+        )
+        .scalar()
         .all()
     )
 
@@ -260,7 +255,7 @@ async def user_followers_get_api(
     count: int = 100,
     me_user_id: int = Depends(user_auth_required),
 ) -> List[_UserSearchResponse]:
-    followers_query: m.User = await AppCtx.current.db.session.query(
+    followers_query: m.User = await AppCtx.current.db.session.execute(
         sql_exp.select(m.User)
         .join(m.UserFollow, (m.User.id == m.UserFollow.request_user_id))
         .where(m.UserFollow.target_user_id == me_user_id)
@@ -309,7 +304,7 @@ async def follow_post_api(
     )
 
     if not is_target_user_exist:
-        raise LogicError(
+        raise fastapi_uitl.LogicError(
             code="not_found_user",
             message="failed to found user by this id",
         )
@@ -325,9 +320,7 @@ async def follow_post_api(
 
 
 @router.delete("/")
-async def delete_all(
-    # await AppCtx.current.db.session: Session = Depends(get_await AppCtx.current.db.session),
-) -> None:
-    await AppCtx.current.db.session.query(m.User).delete()
+async def delete_all() -> None:
+    await AppCtx.current.db.session.execute(sql_exp.delete(m.User))
 
     await AppCtx.current.db.session.commit()
