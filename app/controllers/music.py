@@ -5,11 +5,10 @@ from fastapi import Depends
 from pydantic import BaseModel
 
 from app.models.services.music import Artist, Track
-from app.settings import AppSettings
-from app.utils import AppUtils
+
 from app.utils import fastapi as fastapi_util
+from app.utils import spotify as spotify_util
 from app.utils.auth import user_auth_required
-from app.utils.fastapi import get_app_settings, get_app_utils, get_spotify_access_token
 
 router = fastapi_util.CustomAPIRouter(prefix="/music", tags=["music"])
 
@@ -30,9 +29,9 @@ async def music_track_search_api(
     q: str,
     offset: int = 0,
     limit: int = 10,
-    spotify_access_token: Optional[str] = Depends(get_spotify_access_token),
-    app_settings: AppSettings = Depends(get_app_settings),
-    app_utils: AppUtils = Depends(get_app_utils),
+    spotify_access_token: Optional[str] = Depends(
+        fastapi_util.get_spotify_access_token
+    ),
     me_user_id: int = Depends(user_auth_required),
 ) -> _MusicSearchResponse:
     async with httpx.AsyncClient() as client:
@@ -47,7 +46,7 @@ async def music_track_search_api(
             },
             headers={
                 **DEFAULT_HEADER,
-                "Authorization": f"Bearer {await app_utils.spotify.client_credentials}",
+                "Authorization": f"Bearer {await spotify_util.client_credentials}",
             },
         )
 
@@ -69,7 +68,9 @@ class _MusicTrackGetResponse(BaseModel):
 @router.get("/track/{track_id:str}")
 async def music_track_get_api(
     track_id: str,
-    spotify_access_token: Optional[str] = Depends(get_spotify_access_token),
+    spotify_access_token: Optional[str] = Depends(
+        fastapi_util.get_spotify_access_token
+    ),
     me_user_id: int = Depends(user_auth_required),
 ) -> _MusicTrackGetResponse:
     if spotify_access_token is None:
@@ -103,7 +104,9 @@ class _MusicArtistGetResponse(BaseModel):
 @router.get("/artist/{artist_id:str}")
 async def music_artist_get_api(
     artist_id: str,
-    spotify_access_token: Optional[str] = Depends(get_spotify_access_token),
+    spotify_access_token: Optional[str] = Depends(
+        fastapi_util.get_spotify_access_token
+    ),
     me_user_id: int = Depends(user_auth_required),
 ) -> _MusicArtistGetResponse:
     if spotify_access_token is None:
