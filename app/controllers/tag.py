@@ -92,7 +92,7 @@ def tag_search_api(
     tags_query: m.Tag = await AppCtx.current.db.session.execute(sql_exp.select(m.Tag))
 
     if q.filter_expr is not None:
-        tags_query = tags_query.filter(
+        tags_query = tags_query.where(
             _TagSearchRequestFilterExpr.to_query(
                 q.filter_expr,
                 {

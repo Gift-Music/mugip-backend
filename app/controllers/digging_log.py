@@ -246,7 +246,7 @@ async def digging_log_search_api(
     response: Response,
     me_user_id: int = Depends(user_auth_required),
 ) -> List[_DiggingLogSearchResponse]:
-    digging_logs_query: m.DiggingLog = await AppCtx.current.db.session.execute(
+    digging_logs_query = (
         sql_exp.select(m.DiggingLog)
         .join(m.DiggingLog.digging_log_tags)
         .options(

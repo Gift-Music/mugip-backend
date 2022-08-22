@@ -22,8 +22,8 @@ class _SignUpRequest(BaseModel):
 
 @router.post("/signup")
 async def signup_api(q: _SignUpRequest) -> None:
-    is_email_exist: m.User = await AppCtx.current.db.session.execute(
-        sql_exp.select(m.User).where(m.User.email == q.email)
+    is_email_exist = await AppCtx.current.db.session.scalar(
+        sql_exp.exists().where(m.User.email == q.email).select()
     )
 
     if is_email_exist:

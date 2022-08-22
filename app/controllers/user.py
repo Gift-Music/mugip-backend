@@ -171,7 +171,7 @@ class _UserSearchRequest(BaseModel):
     count: int = Field(ge=1, le=100)
 
     @pydantic.validator("filter_expr")
-    async def validator_filter_expr(
+    def validator_filter_expr(
         cls, value: Optional[Dict[str, Any]]
     ) -> Optional[Dict[str, Any]]:
         if value is not None:
@@ -202,12 +202,10 @@ async def user_search_post_api(
     response: Response,
     me_user_id: int = Depends(user_auth_required),
 ) -> List[_UserSearchResponse]:
-    users_query: m.User = await AppCtx.current.db.session.execute(
-        sql_exp.select(m.User)
-    )
+    users_query = await AppCtx.current.db.session.query(m.User)
 
     if q.filter_expr is not None:
-        users_query = users_query.filter(
+        users_query = users_query.where(
             _UserSearchRequestFilterExpr.to_query(
                 q.filter_expr,
                 {
@@ -235,13 +233,13 @@ async def user_search_post_api(
 
     users: list[m.User] = (
         (
-            await AppCts.current.db.session.execute(
+            await AppCtx.current.db.session.execute(
                 users_query.order_by(sort_by_order_exp(sort_by_col)).slice(
                     q.offset, q.offset + q.count
                 )
             )
         )
-        .scalar()
+        .scalars()
         .all()
     )
 
