@@ -16,6 +16,7 @@ router = fastapi_util.CustomAPIRouter(prefix="/auth", tags=["auth"])
 
 class _SignUpRequest(BaseModel):
     email: EmailStr
+    username: str
     nickname: str
     password: SecretStr
     is_agreed: bool
@@ -35,6 +36,7 @@ async def signup_api(q: _SignUpRequest) -> None:
 
     user = m.User(
         email=q.email,
+        username=q.username,
         nickname=q.nickname,
         password=await auth_util.generate_hashed_password(
             q.password.get_secret_value()
@@ -45,7 +47,8 @@ async def signup_api(q: _SignUpRequest) -> None:
 
     try:
         await AppCtx.current.db.session.commit()
-    except IntegrityError:
+    except IntegrityError as ex:
+        print(ex)
         raise fastapi_util.LogicError(
             code="try_again",
             message="there is a race condition. try again.",
@@ -76,7 +79,7 @@ async def login_api(q: _LoginRequest) -> _LoginResponse:
             message="failed to found user by this email",
         )
 
-    if not auth_util.validate_hashed_password(
+    if not await auth_util.validate_hashed_password(
         q.password.get_secret_value(),
         user.password,  # type: ignore
     ):
@@ -84,7 +87,7 @@ async def login_api(q: _LoginRequest) -> _LoginResponse:
             code="invalid_password", message="this password is not valid"
         )
 
-    access_token, refresh_token = await auth_util.generate_token(
+    access_token, refresh_token = auth_util.generate_token(
         user.id  # type: ignore
     )
 
@@ -108,7 +111,7 @@ async def login_oauth_api(q: OAuth2PasswordRequestForm = Depends()) -> _LoginRes
             message="failed to found user by this email",
         )
 
-    if not auth_util.validate_hashed_password(
+    if not await auth_util.validate_hashed_password(
         q.password,
         user.password,  # type: ignore
     ):

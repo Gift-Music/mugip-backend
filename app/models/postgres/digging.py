@@ -1,4 +1,5 @@
 from geoalchemy2 import Geography
+from sqlalchemy import DDL, event
 from sqlalchemy import func as sql_func
 from sqlalchemy import orm as sql_orm
 from sqlalchemy import sql as sql_exp
@@ -19,7 +20,7 @@ class Artist(ModelBase):
     id = Column(sqltypes.String, nullable=False, primary_key=True)
     name = Column(sqltypes.String, nullable=False)
 
-    tracks = relationship(
+    tracks: list["ArtistTrack"] = relationship(
         "ArtistTrack", back_populates="artist", uselist=True, cascade="all"
     )
 
@@ -33,8 +34,12 @@ class Album(ModelBase):
     release_date = Column(sqltypes.TIMESTAMP(timezone=True), nullable=False)
     total_tracks = Column(sqltypes.Integer, nullable=False)
 
-    images = relationship("Image", uselist=True, back_populates="album", cascade="all")
-    tracks = relationship("Track", uselist=True, back_populates="album", cascade="all")
+    images: list["Image"] = relationship(
+        "Image", uselist=True, back_populates="album", cascade="all"
+    )
+    tracks: list["Track"] = relationship(
+        "Track", uselist=True, back_populates="album", cascade="all"
+    )
 
 
 class Track(ModelBase):
@@ -43,12 +48,16 @@ class Track(ModelBase):
     id = Column(sqltypes.String, nullable=False, primary_key=True)
 
     album_id = Column(sqltypes.String, ForeignKey(Album.id))
-    album = relationship("Album", uselist=False)
+    album: "Album" = relationship("Album", uselist=False)
 
-    artist_tracks = relationship("ArtistTrack", back_populates="track", uselist=True)
+    artist_tracks: list["ArtistTrack"] = relationship(
+        "ArtistTrack", back_populates="track", uselist=True
+    )
     artists = sql_orm.ColumnProperty
 
-    digging_logs = relationship("DiggingLog", back_populates="track", uselist=True)
+    digging_logs: list["DiggingLog"] = relationship(
+        "DiggingLog", back_populates="track", uselist=True
+    )
 
     duration_ms = Column(sqltypes.Float, nullable=False)
     track_number = Column(sqltypes.Integer, nullable=False)
@@ -144,7 +153,7 @@ Track.artists = sql_orm.column_property(
         .select_from(
             sql_exp.join(
                 ArtistTrack,  # type: ignore
-                Artist,  # type: ignore
+                Artist,
             ),
         )
         .where(ArtistTrack.track_id == Track.id)
@@ -169,11 +178,17 @@ DiggingLog.tags = sql_orm.column_property(
         .select_from(
             sql_exp.join(
                 Tag,  # type: ignore
-                DiggingLogTag,  # type: ignore
+                DiggingLogTag,
             ),
         )
         .where(DiggingLog.id == DiggingLogTag.digging_log_id)
         .label("tags")
     ),
     deferred=False,
+)
+
+event.listen(
+    DiggingLog.__table__,
+    "before_create",
+    DDL("CREATE EXTENSION IF NOT EXISTS postgis;"),
 )

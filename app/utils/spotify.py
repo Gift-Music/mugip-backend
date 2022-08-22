@@ -24,9 +24,9 @@ SPOTIFY_API_BASE_URL = "https://api.spotify.com/v1"
 SPOTIFY_AUTH_TOKEN = lazystr(
     lambda: b64encode(
         (
-            AppCtx.settings.SPOTIFY_CLIENT_ID
+            AppCtx.current.settings.SPOTIFY_CLIENT_ID
             + ":"
-            + AppCtx.settings.SPOTIFY_CLIENT_SECRET
+            + AppCtx.current.settings.SPOTIFY_CLIENT_SECRET
         ).encode()
     ).decode()
 )

@@ -82,7 +82,7 @@ def generate_token(user_id: int) -> tuple[str, str]:
                 + datetime.timedelta(hours=_USER_LOGIN_TTL)
             ).timestamp(),
         },
-        key=AppCtx.settings.SECRET_KEY,
+        key=AppCtx.current.settings.SECRET_KEY,
         algorithm="HS256",
     )
 
@@ -95,7 +95,7 @@ def generate_token(user_id: int) -> tuple[str, str]:
                 + datetime.timedelta(hours=_USER_REFRESH_TTL)
             ).timestamp(),
         },
-        key=AppCtx.settings.SECRET_KEY,
+        key=AppCtx.current.settings.SECRET_KEY,
         algorithm="HS256",
     )
 
@@ -116,7 +116,7 @@ async def user_auth_required(token: str = Depends(user_auth_scheme)) -> int:
     try:
         try:
             token_info = jwt.decode(
-                jwt=token, key=AppCtx.settings.SECRET_KEY, algorithms=["HS256"]
+                jwt=token, key=AppCtx.current.settings.SECRET_KEY, algorithms=["HS256"]
             )
         except jwt.ExpiredSignatureError:
             raise _AuthFailedError("token_is_expired")

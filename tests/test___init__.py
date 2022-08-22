@@ -9,10 +9,10 @@ if TYPE_CHECKING:
     from app.settings import AppSettings
 
 
-def test_init_logger(_app_settings: AppSettings) -> None:
+def test_init_logger(app_settings: AppSettings) -> None:
     from app import init_logger
 
-    init_logger(_app_settings)
+    init_logger(app_settings)
 
 
 @pytest.mark.asyncio
