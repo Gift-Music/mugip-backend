@@ -127,8 +127,9 @@ async def login_oauth_api(q: OAuth2PasswordRequestForm = Depends()) -> _LoginRes
 
 
 class _SocialSignUpRequest(BaseModel):
-    code: str
-    redirect_uri: str
+    code: str | None = None
+    redirect_uri: str | None = None
+    token: str | None = None
     provider_type: oauth_util.ProviderTypeEnum
 
 
@@ -142,17 +143,20 @@ class _SocialSignUpResponse(BaseModel):
 @router.post("/signup/social")
 async def social_signup_api(q: _SocialSignUpRequest) -> _SocialSignUpResponse:
     try:
-        (
-            social_access_token,
-            social_refresh_token,
-        ) = await oauth_util.get_social_token(
-            q.code,
-            q.redirect_uri,
-            q.provider_type,
-        )
-        social_info = await oauth_util.get_social_info(
-            social_access_token, q.provider_type
-        )
+        if q.provider_type == oauth_util.ProviderTypeEnum.Spotify:
+            (
+                social_access_token,
+                social_refresh_token,
+            ) = await oauth_util.get_social_token(
+                q.code,  # type: ignore
+                q.redirect_uri,  # type: ignore
+                q.provider_type,
+            )
+        else:
+            social_access_token = q.token  # type: ignore
+            social_info = await oauth_util.get_social_info(
+                social_access_token, q.provider_type
+            )
     except oauth_util.OauthUtilError as ex:
         raise fastapi_util.LogicError(
             code=ex.code,
@@ -163,7 +167,7 @@ async def social_signup_api(q: _SocialSignUpRequest) -> _SocialSignUpResponse:
         sql_exp.exists()
         .where(
             (m.UserOauthLogin.uid == social_info.uid)
-            & (m.UserOauthLogin.provider_type == q.provider_type)
+            & (m.UserOauthLogin.provider_type == q.provider_type.value)
         )
         .select()
     )
@@ -176,13 +180,14 @@ async def social_signup_api(q: _SocialSignUpRequest) -> _SocialSignUpResponse:
 
     user = m.User(
         email=social_info.email,
-        nickname=social_info.name,
+        username=social_info.uid,
+        nickname=social_info.uid,
     )
 
     user_oauth_login = m.UserOauthLogin(
         user=user,
         uid=social_info.uid,
-        provider_type=q.provider_type,
+        provider_type=q.provider_type.value,
     )
 
     AppCtx.current.db.session.add(user)
@@ -250,7 +255,7 @@ async def social_login_api(q: _SocialLoginRequest) -> _SocialLoginResponse:
             message="failed to found user by this email",
         )
 
-    access_token, refresh_token = auth_util.generate_token(user.id)
+    access_token, refresh_token = auth_util.generate_token(user.id)  # type: ignore
 
     return _SocialLoginResponse(
         access_token=access_token,
@@ -317,7 +322,7 @@ class _GuestLoginRequest(BaseModel):
 async def guest_login_api(q: _GuestLoginRequest) -> _LoginResponse:
     user = m.User(
         nickname=q.nickname,
-        password=auth_util.generate_hashed_password(
+        password=await auth_util.generate_hashed_password(
             auth_util.generate_random_token(10)
         ),
     )
@@ -325,7 +330,7 @@ async def guest_login_api(q: _GuestLoginRequest) -> _LoginResponse:
     AppCtx.current.db.session.add(user)
     await AppCtx.current.db.session.commit()
 
-    access_token, refresh_token = auth_util.generate_token(user.id)
+    access_token, refresh_token = auth_util.generate_token(user.id)  # type: ignore
 
     return _LoginResponse(
         access_token=access_token,

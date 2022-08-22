@@ -25,7 +25,7 @@ install_requires = [
     "msgpack==1.0.2",
     "pillow==9.1.1",
     "pydantic[email]==1.9.1",
-    "pyjwt==2.4.0",
+    "pyjwt[crypto]==2.4.0",
     "python-multipart==0.0.5",
     "redis==4.3.3",
     "setuptools-scm==6.4.2",

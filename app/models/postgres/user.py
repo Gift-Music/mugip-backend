@@ -26,14 +26,14 @@ class User(ModelBase):
 
     password = Column(sqltypes.String, nullable=True)
 
-    user_oauth_logins = relationship(
+    user_oauth_logins: list["UserOauthLogin"] = relationship(
         "UserOauthLogin",
         uselist=True,
         back_populates="user",
         cascade="all",
     )
 
-    followers = relationship(
+    followers: list["UserFollow"] = relationship(
         "UserFollow",
         uselist=True,
         back_populates="target_user",
@@ -41,7 +41,7 @@ class User(ModelBase):
         primaryjoin="(User.id==UserFollow.target_user_id)",
     )
 
-    followings = relationship(
+    followings: list["UserFollow"] = relationship(
         "UserFollow",
         uselist=True,
         back_populates="request_user",
@@ -49,7 +49,7 @@ class User(ModelBase):
         primaryjoin="(User.id==UserFollow.request_user_id)",
     )
 
-    profile_images = relationship(
+    profile_images: list["UserProfileImageLog"] = relationship(
         "UserProfileImageLog",
         uselist=True,
         back_populates="user",
@@ -67,7 +67,7 @@ class UserProfileImageLog(ModelBase):
     profile_image_url = Column(sqltypes.String, nullable=False)
 
     user_id = Column(sqltypes.Integer, ForeignKey(User.id), nullable=False, index=True)
-    user = relationship("User", uselist=False)
+    user: User = relationship("User", uselist=False)
 
 
 class UserFollow(ModelBase):
@@ -80,12 +80,16 @@ class UserFollow(ModelBase):
         primary_key=True,
         index=True,
     )
-    request_user = relationship("User", uselist=False, foreign_keys=[request_user_id])
+    request_user: User = relationship(
+        "User", uselist=False, foreign_keys=[request_user_id]
+    )
 
     target_user_id = Column(
         sqltypes.Integer, ForeignKey(User.id), nullable=False, primary_key=True
     )
-    target_user = relationship("User", uselist=False, foreign_keys=[target_user_id])
+    target_user: User = relationship(
+        "User", uselist=False, foreign_keys=[target_user_id]
+    )
 
 
 class UserOauthLogin(ModelBase):
@@ -101,7 +105,7 @@ class UserOauthLogin(ModelBase):
     user: User = relationship("User", uselist=False)
 
     uid = Column(sqltypes.String, nullable=False, primary_key=True)
-    provider_type = Column(sqltypes.Integer, nullable=False)
+    provider_type = Column(sqltypes.String, nullable=False)
 
 
 UniqueConstraint(
@@ -114,7 +118,7 @@ User.last_profile_image_url = sql_orm.column_property(
     (
         sql_func.coalesce(
             sql_exp.select([UserProfileImageLog.profile_image_url])
-            .correlate_except(UserProfileImageLog)  # type: ignore
+            .correlate_except(UserProfileImageLog)
             .where(User.id == UserProfileImageLog.user_id)
             .order_by(User.created.desc())
             .limit(1)

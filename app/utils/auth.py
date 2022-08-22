@@ -82,7 +82,7 @@ def generate_token(user_id: int) -> tuple[str, str]:
                 + datetime.timedelta(hours=_USER_LOGIN_TTL)
             ).timestamp(),
         },
-        key=AppCtx.settings.SECRET_KEY,
+        key=AppCtx.current.settings.SECRET_KEY,
         algorithm="HS256",
     )
 

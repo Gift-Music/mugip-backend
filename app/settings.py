@@ -88,10 +88,14 @@ class AppSettings(BaseSettings):
         default="",
         description="spotify client id",
     )
-
     SPOTIFY_CLIENT_SECRET: str = Field(
         default="",
         description="spotify client secret",
+    )
+
+    APPLE_OAUTH_CLIENT_ID_LIST: list[str] = Field(
+        default=[],
+        description="Apple client id list",
     )
 
     AWS_ACCESS_KEY_ID: str = Field(default="", description="aws access key id")

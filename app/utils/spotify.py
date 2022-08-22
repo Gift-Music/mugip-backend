@@ -106,19 +106,3 @@ class SpotifyApiHandler:
         await AppCtx.current.redis.set(track_key, msgpack.dumps(track.dict()))
 
         return track
-
-
-async def spotify_me_api(token: str) -> dict[str, Any]:
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            url=SPOTIFY_API_BASE_URL + "/me",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-
-        if resp.status_code != 200:
-            raise SpotifyUtilError(
-                code="failed_to_fetch_spotify_profile",
-                message="something wrong",
-            )
-
-    return resp.json()  # type: ignore

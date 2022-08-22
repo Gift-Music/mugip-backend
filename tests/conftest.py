@@ -2,7 +2,6 @@ from asyncio import AbstractEventLoop
 from typing import AsyncIterator, Iterator
 
 import pytest
-import pytest_asyncio
 import uvloop
 from asgi_lifespan import LifespanManager
 from httpx import AsyncClient
@@ -23,7 +22,7 @@ def event_loop() -> Iterator[AbstractEventLoop]:
     loop.close()
 
 
-@pytest_asyncio.fixture(scope="class")
+@pytest.fixture(scope="class")
 async def app_client(app_settings: AppSettings) -> AsyncIterator[AsyncClient]:
     app = create_app(app_settings)
     async with AsyncClient(
