@@ -32,7 +32,7 @@ class AppSettings(BaseSettings):
     )
 
     DATABASE_URI: AnyUrl = Field(
-        default="postgresql://mugip:devpassword@127.0.0.1:35000/mugip",
+        default="postgresql+asyncpg://mugip:devpassword@127.0.0.1:35000/mugip",
         description="PosstgreSQL connection URI.",
     )
     DATABASE_OPTIONS: Dict[str, Any] = Field(

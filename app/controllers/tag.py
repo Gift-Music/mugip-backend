@@ -4,8 +4,9 @@ import jsonschema
 from fastapi import Depends, Response
 from pydantic import BaseModel, Field, validator
 from sqlalchemy.sql import expression as sql_exp
-from app.models import postgres as m
+
 from app.ctx import AppCtx
+from app.models import postgres as m
 from app.utils import fastapi as fastapi_util
 from app.utils.auth import user_auth_required
 from app.utils.filter_expr import build_filter_expr
@@ -19,7 +20,7 @@ class _TagPostRequest(BaseModel):
 
 
 @router.post("/")
-def tag_post_api(
+async def tag_post_api(
     q: _TagPostRequest,
     _: int = Depends(user_auth_required),
 ) -> None:
@@ -84,7 +85,7 @@ class _TagSearchResponse(BaseModel):
 
 
 @router.post("/search")
-def tag_search_api(
+async def tag_search_api(
     q: _TagSearchRequest,
     response: Response,
     _: int = Depends(user_auth_required),
