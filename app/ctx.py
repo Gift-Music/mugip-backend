@@ -11,10 +11,9 @@ from mypy_boto3_s3 import S3Client
 from redis.asyncio import ConnectionPool as RedisConnectionPool
 from redis.asyncio import Redis
 
-from app.utils.rdb import RdbConn
-
 if TYPE_CHECKING:
     from .settings import AppSettings
+    from .utils.rdb import RdbConn
 
 
 logger = logging.getLogger(__name__)

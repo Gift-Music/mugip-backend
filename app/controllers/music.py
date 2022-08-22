@@ -5,7 +5,6 @@ from fastapi import Depends
 from pydantic import BaseModel
 
 from app.models.services.music import Artist, Track
-
 from app.utils import fastapi as fastapi_util
 from app.utils import spotify as spotify_util
 from app.utils.auth import user_auth_required

@@ -9,11 +9,12 @@ from fastapi import Depends, File, Response, UploadFile
 from PIL import Image
 from pydantic import BaseModel, Field
 from sqlalchemy.sql import expression as sql_exp
+
 import app.models.postgres as m
-from app.utils.auth import user_auth_required
 from app.ctx import AppCtx
-from app.utils import remote_file as remote_file_util
 from app.utils import fastapi as fastapi_uitl
+from app.utils import remote_file as remote_file_util
+from app.utils.auth import user_auth_required
 from app.utils.filter_expr import build_filter_expr
 
 router = fastapi_uitl.CustomAPIRouter(prefix="/user", tags=["user"])

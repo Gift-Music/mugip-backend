@@ -4,11 +4,12 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr, SecretStr
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql import expression as sql_exp
-from app.models import postgres as m
+
 from app.ctx import AppCtx
+from app.models import postgres as m
 from app.utils import auth as auth_util
-from app.utils import oauth as oauth_util
 from app.utils import fastapi as fastapi_util
+from app.utils import oauth as oauth_util
 
 router = fastapi_util.CustomAPIRouter(prefix="/auth", tags=["auth"])
 
