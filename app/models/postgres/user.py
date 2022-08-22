@@ -17,7 +17,13 @@ class User(ModelBase):
     email = Column(sqltypes.String, unique=True, nullable=True)
     email_verified_dt = Column(sqltypes.TIMESTAMP(timezone=True), nullable=True)
 
-    nickname = Column(sqltypes.String, nullable=True)
+    username = Column(sqltypes.String, unique=True, nullable=False)
+    nickname = Column(sqltypes.String, nullable=False)
+
+    gender = Column(sqltypes.String, nullable=True)
+    birthday = Column(sqltypes.Date, nullable=True)
+    phone = Column(sqltypes.String, nullable=True)
+
     password = Column(sqltypes.String, nullable=True)
 
     user_oauth_logins = relationship(
