@@ -62,7 +62,7 @@ class AppSettings(BaseSettings):
             # connection options
             "socket_keepalive": True,
             "socket_keepalive_options": {
-                socket.TCP_KEEPIDLE: 30,
+                # socket.TCP_KEEPIDLE: 30,
                 socket.TCP_KEEPINTVL: 15,
             },
             "retry_on_timeout": True,

@@ -23,6 +23,10 @@ async-timeout==4.0.2
     # via
     #   -c requirements.txt
     #   redis
+asyncpg==0.26.0
+    # via
+    #   -c requirements.txt
+    #   mugip-backend
 attrs==21.4.0
     # via
     #   -c requirements.txt
@@ -32,6 +36,8 @@ attrs==21.4.0
 autopep8==1.5.7
     # via mugip-backend
 bandit==1.7.0
+    # via mugip-backend
+black==22.6.0
     # via mugip-backend
 boto3[crt]==1.24.7
     # via
@@ -62,6 +68,7 @@ charset-normalizer==2.0.10
 click==8.0.3
     # via
     #   -c requirements.txt
+    #   black
     #   uvicorn
 coverage[toml]==6.2
     # via pytest-cov
@@ -175,7 +182,9 @@ mypy-boto3-s3==1.24.0
     #   -c requirements.txt
     #   boto3-stubs
 mypy-extensions==0.4.3
-    # via mypy
+    # via
+    #   black
+    #   mypy
 packaging==21.3
     # via
     #   -c requirements.txt
@@ -183,12 +192,16 @@ packaging==21.3
     #   pytest
     #   redis
     #   setuptools-scm
+pathspec==0.9.0
+    # via black
 pbr==5.8.0
     # via stevedore
 pillow==9.1.1
     # via
     #   -c requirements.txt
     #   mugip-backend
+platformdirs==2.5.2
+    # via black
 pluggy==0.13.1
     # via pytest
 psycopg2-binary==2.9.1
@@ -305,6 +318,7 @@ toml==0.10.2
 tomli==2.0.0
     # via
     #   -c requirements.txt
+    #   black
     #   coverage
     #   mypy
     #   setuptools-scm

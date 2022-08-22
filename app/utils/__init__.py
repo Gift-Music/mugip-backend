@@ -12,7 +12,7 @@ from .remote_file import RemoteFileAppUtil
 from .spotify import SpotifyAppUtil
 
 if TYPE_CHECKING:
-    from app.context import AppContext
+    from app.ctx import AppCtx
 
 
 class AppUtils:
@@ -20,10 +20,10 @@ class AppUtils:
         self.app = app
 
     @property
-    def _app_context(self) -> AppContext:
-        from app.context import AppContext
+    def _app_context(self) -> AppCtx:
+        from app.ctx import AppCtx
 
-        return AppContext.from_app(self.app)
+        return AppCtx.from_app(self.app)
 
     @cached_property
     def auth(self) -> AuthAppUtil:

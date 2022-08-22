@@ -1,27 +1,15 @@
 from __future__ import annotations
 
-import asyncio
 import dataclasses
 import logging
-from concurrent.futures import ThreadPoolExecutor
-from typing import (TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, Optional,
-                    get_type_hints)
+from typing import Any, Callable, Dict, Optional, get_type_hints
 
 from fastapi import APIRouter, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from app.context import AppContext
-
-if TYPE_CHECKING:
-    from app.settings import AppSettings
-    from app.utils import AppUtils
-
 logger = logging.getLogger(__name__)
-
-_SQLA_SESSION_CLOSER_THREADPOOL = ThreadPoolExecutor(1)
 
 
 @dataclasses.dataclass
@@ -77,7 +65,7 @@ FASTAPI_RESPONSES: dict[int | str, dict[str, Any]] = {
 }
 
 
-class ErrorReportAndForgetMiddleware:
+class ErrorReportMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
@@ -132,40 +120,8 @@ class CustomAPIRouter(APIRouter):
         return super().add_api_route(path, endpoint, **kwargs)
 
 
-async def get_app_settings(request: Request) -> AppSettings:
-    return AppContext.from_app(request.app).app_settings
-
-
-async def get_app_utils(request: Request) -> AppUtils:
-    return AppContext.from_app(request.app).app_utils
-
-
-async def get_spotify_access_token(request: Request) -> str:
-    token = request.headers.get("sptify_access_token")
-    return (
-        token
-        if token is not None
-        else AppContext.from_app(request.app).app_utils.spotify.client_credentials
-    )
-
-
-async def get_db_session(request: Request) -> AsyncIterator[Session]:
-    # NOTE : This function is called by `fastapi.Depends` and it is not
-    #        guaranteed to be in the same thread to the routing function.
-    #        Therefore, we do not use scoped_session with ThreadLocal.
-    db_engine = AppContext.from_app(request.app).db_engine
-
-    loop = asyncio.get_event_loop()
-
-    session = Session(db_engine)
-
-    try:
-        yield session
-    finally:
-        await loop.run_in_executor(
-            _SQLA_SESSION_CLOSER_THREADPOOL,
-            session.close,
-        )
+async def get_spotify_access_token(request: Request) -> str | None:
+    return request.headers.get("sptify_access_token")  # type: ignore
 
 
 async def get_client_ip(request: Request) -> str:
@@ -173,5 +129,5 @@ async def get_client_ip(request: Request) -> str:
     return (  # type: ignore
         (x_forwarded_for.split(",")[0]).split(":")[0]
         if x_forwarded_for
-        else request.client.host
+        else request.client.host  # type: ignore
     )
