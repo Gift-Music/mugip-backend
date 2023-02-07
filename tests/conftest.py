@@ -9,6 +9,7 @@ from httpx import AsyncClient
 
 from app import create_app
 from app.settings import AppSettings
+from tests import constants as test_c
 
 
 @pytest.fixture(scope="session")
@@ -30,3 +31,16 @@ async def app_client(app_settings: AppSettings) -> AsyncIterator[AsyncClient]:
         app=app, base_url="http://test"
     ) as app_client, LifespanManager(app):
         yield app_client
+
+
+@pytest_asyncio.fixture(scope="class")
+async def user_access_token(app_client: AsyncClient) -> str:
+    resp = await app_client.post(
+        "/auth/login",
+        json={
+            "email": test_c.DEFAULT_USER_EMAIL,
+            "password": test_c.DEFAULT_USER_PASSWORD,
+        },
+    )
+
+    return resp.json()["access_token"]  # type: ignore

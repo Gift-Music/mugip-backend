@@ -87,9 +87,7 @@ async def login_api(q: _LoginRequest) -> _LoginResponse:
             code="invalid_password", message="this password is not valid"
         )
 
-    access_token, refresh_token = auth_util.generate_token(
-        user.id  # type: ignore
-    )
+    access_token, refresh_token = auth_util.generate_token(user.id)  # type: ignore
 
     return _LoginResponse(
         access_token=access_token,
