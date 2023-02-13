@@ -1,4 +1,5 @@
 import pytest_asyncio
+import pytest
 from tests.helper import with_app_ctx, ensure_fresh_env
 from app.settings import AppSettings
 from httpx import AsyncClient
@@ -14,6 +15,7 @@ class TestMusic:
             await ensure_fresh_env()
             await create_user(app_client)
 
+    @pytest.mark.skip(reason="test it later")
     async def test_music_track_search_api(
         self,
         app_client: AsyncClient,

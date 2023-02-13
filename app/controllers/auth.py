@@ -117,7 +117,7 @@ async def login_oauth_api(q: OAuth2PasswordRequestForm = Depends()) -> _LoginRes
             code="invalid_password", message="this password is not valid"
         )
 
-    access_token, refresh_token = await auth_util.generate_token(
+    access_token, refresh_token = auth_util.generate_token(
         user.id  # type: ignore
     )
 
@@ -177,6 +177,7 @@ async def social_signup_api(q: _SocialSignUpRequest) -> _SocialSignUpResponse:
 
     user = m.User(
         email=social_info.email,
+        username=social_info.name, # add this column for not violating DB Column rules.
         nickname=social_info.name,
     )
 
@@ -191,7 +192,7 @@ async def social_signup_api(q: _SocialSignUpRequest) -> _SocialSignUpResponse:
 
     await AppCtx.current.db.session.commit()
 
-    access_token, refresh_token = await auth_util.generate_token(
+    access_token, refresh_token = auth_util.generate_token(
         user.id  # type: ignore
     )
 
@@ -317,8 +318,9 @@ class _GuestLoginRequest(BaseModel):
 @router.post("/login/guest")
 async def guest_login_api(q: _GuestLoginRequest) -> _LoginResponse:
     user = m.User(
+        username=q.nickname,
         nickname=q.nickname,
-        password=auth_util.generate_hashed_password(
+        password=await auth_util.generate_hashed_password(
             auth_util.generate_random_token(10)
         ),
     )
