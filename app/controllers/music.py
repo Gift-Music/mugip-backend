@@ -34,6 +34,7 @@ async def music_track_search_api(
     me_user_id: int = Depends(user_auth_required),
 ) -> _MusicSearchResponse:
     async with httpx.AsyncClient() as client:
+        spfy_handler = spotify_util.SpotifyApiHandler()
         response = await client.get(
             f"{SPOTIFY_URL}/search",
             params={
@@ -45,7 +46,7 @@ async def music_track_search_api(
             },
             headers={
                 **DEFAULT_HEADER,
-                "Authorization": f"Bearer {await spotify_util.client_credentials}",
+                "Authorization": f"Bearer {await spfy_handler.client_credentials}",
             },
         )
 
@@ -116,7 +117,7 @@ async def music_artist_get_api(
 
     async with httpx.AsyncClient() as client:
         response = await client.get(
-            f"{SPOTIFY_URL}/tracks/{artist_id}",
+            f"{SPOTIFY_URL}/artists/{artist_id}",
             headers={
                 **DEFAULT_HEADER,
                 "Authorization": f"Bearer {spotify_access_token}",

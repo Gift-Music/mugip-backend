@@ -121,7 +121,7 @@ class CustomAPIRouter(APIRouter):
 
 
 async def get_spotify_access_token(request: Request) -> str | None:
-    return request.headers.get("sptify_access_token")  # type: ignore
+    return request.headers.get("spotify_access_token")  # type: ignore
 
 
 async def get_client_ip(request: Request) -> str:

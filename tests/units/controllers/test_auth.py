@@ -225,7 +225,6 @@ class TestAuthFail:
     async def test_auth_signup_api_fail_already_registered(
         self,
         app_client: AsyncClient,
-        monkeypatch: MonkeyPatch,
         app_settings: AppSettings,
         expected_error_code: str | None,
         expected_error_message: str | None,
@@ -238,11 +237,6 @@ class TestAuthFail:
             email="test@example.com",
         )
         async with with_app_ctx(app_settings):
-            with monkeypatch.context() as mp:
-                mp.setattr(
-                    ctx, "_current_app_ctx_getter", lambda: "here's current contexts"
-                )
-
             request_query = fastapi_auth._SignUpRequest(
                 email="test@example.com",
                 username="test",
@@ -303,24 +297,18 @@ class TestAuthFail:
     )
     async def test_auth_login_api_fail_no_user(
         self,
-        monkeypatch: MonkeyPatch,
         app_settings: AppSettings,
         expected_error_code: str | None,
         expected_error_message: str | None,
     ) -> None:
         async with with_app_ctx(app_settings):
-            with monkeypatch.context() as mp:
-                mp.setattr(
-                    ctx, "_current_app_ctx_getter", lambda: "here's current contexts"
-                ),
+            request_query = fastapi_auth._LoginRequest(
+                email="wrong_user@example.com",
+                password="test_password",
+            )
 
-                request_query = fastapi_auth._LoginRequest(
-                    email="wrong_user@example.com",
-                    password="test_password",
-                )
-
-                with pytest.raises(fastapi_util.LogicError) as err:
-                    await fastapi_auth.login_api(q=request_query)
+            with pytest.raises(fastapi_util.LogicError) as err:
+                await fastapi_auth.login_api(q=request_query)
 
         assert err.value.code == expected_error_code
         assert err.value.message == expected_error_message
@@ -331,17 +319,11 @@ class TestAuthFail:
     )
     async def test_auth_login_api_fail_invalid_pw(
         self,
-        monkeypatch: MonkeyPatch,
         app_settings: AppSettings,
         expected_error_code: str | None,
         expected_error_message: str | None,
     ) -> None:
         async with with_app_ctx(app_settings):
-            with monkeypatch.context() as mp:
-                mp.setattr(
-                    ctx, "_current_app_ctx_getter", lambda: "here's current contexts"
-                ),
-
             request_query = fastapi_auth._LoginRequest(
                 email="test@example.com",
                 password="wrong_password",
@@ -359,19 +341,18 @@ class TestAuthFail:
     )
     async def test_auth_oauth_login_api_fail_no_user(
         self,
-        monkeypatch: MonkeyPatch,
         app_settings: AppSettings,
         expected_error_code: str | None,
         expected_error_message: str | None,
     ) -> None:
         async with with_app_ctx(app_settings):
-            with monkeypatch.context() as mp:
-                mp.setattr(
-                    ctx, "_current_app_ctx_getter", lambda: "here's current contexts"
-                )
-                q = OAuth2PasswordRequestForm(username="wrong_user@example.com", password="test_password", scope="")
-                with pytest.raises(fastapi_util.LogicError) as err:
-                    await fastapi_auth.login_oauth_api(q=q)
+            q = OAuth2PasswordRequestForm(
+                username="wrong_user@example.com",
+                password="test_password",
+                scope="",
+            )
+            with pytest.raises(fastapi_util.LogicError) as err:
+                await fastapi_auth.login_oauth_api(q=q)
 
         assert err.value.code == expected_error_code
         assert err.value.message == expected_error_message
@@ -382,18 +363,14 @@ class TestAuthFail:
     )
     async def test_auth_oauth_login_api_fail_invalid_pw(
         self,
-        monkeypatch: MonkeyPatch,
         app_settings: AppSettings,
         expected_error_code: str | None,
         expected_error_message: str | None,
     ) -> None:
         async with with_app_ctx(app_settings):
-            with monkeypatch.context() as mp:
-                mp.setattr(
-                    ctx, "_current_app_ctx_getter", lambda: "here's current contexts"
-                ),
-
-            q = OAuth2PasswordRequestForm(username="test@example.com", password="wrong_password", scope="")
+            q = OAuth2PasswordRequestForm(
+                username="test@example.com", password="wrong_password", scope=""
+            )
 
             with pytest.raises(fastapi_util.LogicError) as err:
                 await fastapi_auth.login_oauth_api(q=q)
@@ -403,21 +380,20 @@ class TestAuthFail:
 
     async def test_auth_social_signup_api_fail(
         self,
-        monkeypatch: MonkeyPatch,
         app_settings: AppSettings,
     ) -> None:
         async with with_app_ctx(app_settings):
-            with monkeypatch.context() as mp:
-                mp.setattr(
-                    ctx, "_current_app_ctx_getter", lambda: "here's current contexts"
-                ),
-                q = fastapi_auth._SocialSignUpRequest(code="code", redirect_uri="red_uri_here", provider_type=oauth_util.ProviderTypeEnum.Spotify)
-                with pytest.raises(fastapi_util.LogicError) as err:
-                    await fastapi_auth.social_signup_api(q=q)
+            q = fastapi_auth._SocialSignUpRequest(
+                code="code",
+                redirect_uri="red_uri_here",
+                provider_type=oauth_util.ProviderTypeEnum.Spotify,
+            )
+            with pytest.raises(fastapi_util.LogicError) as err:
+                await fastapi_auth.social_signup_api(q=q)
 
         assert err.value.code is not None
         assert err.value.message is not None
-        
+
     @pytest.mark.parametrize(
         "expected_error_code, expected_error_message",
         [("already_exist_uid", "Already signed up user")],
@@ -431,9 +407,6 @@ class TestAuthFail:
     ) -> None:
         async with with_app_ctx(app_settings):
             with monkeypatch.context() as mp:
-                mp.setattr(
-                    ctx, "_current_app_ctx_getter", lambda: "here's current contexts"
-                ),
                 mp.setattr(
                     oauth_util,
                     "get_social_token",
@@ -462,8 +435,12 @@ class TestAuthFail:
                         lambda *args, **kwargs: True,
                     ),
                 )
-                
-                q = fastapi_auth._SocialSignUpRequest(code="code", redirect_uri="red_uri_here", provider_type=oauth_util.ProviderTypeEnum.Spotify)
+
+                q = fastapi_auth._SocialSignUpRequest(
+                    code="code",
+                    redirect_uri="red_uri_here",
+                    provider_type=oauth_util.ProviderTypeEnum.Spotify,
+                )
                 with pytest.raises(fastapi_util.LogicError) as err:
                     await fastapi_auth.social_signup_api(q=q)
 
@@ -476,13 +453,13 @@ class TestAuthFail:
         app_settings: AppSettings,
     ) -> None:
         async with with_app_ctx(app_settings):
-            with monkeypatch.context() as mp:
-                mp.setattr(
-                    ctx, "_current_app_ctx_getter", lambda: "here's current contexts"
-                ),
-                q = fastapi_auth._SocialLoginRequest(code="code", redirect_uri="red_uri_here", provider_type=oauth_util.ProviderTypeEnum.Spotify)
-                with pytest.raises(oauth_util.OauthUtilError) as err:
-                    await fastapi_auth.social_login_api(q=q)
+            q = fastapi_auth._SocialLoginRequest(
+                code="code",
+                redirect_uri="red_uri_here",
+                provider_type=oauth_util.ProviderTypeEnum.Spotify,
+            )
+            with pytest.raises(oauth_util.OauthUtilError) as err:
+                await fastapi_auth.social_login_api(q=q)
 
         assert err.value.code is not None
         assert err.value.message is not None
@@ -501,9 +478,6 @@ class TestAuthFail:
     ) -> None:
         async with with_app_ctx(app_settings):
             with monkeypatch.context() as mp:
-                mp.setattr(
-                    ctx, "_current_app_ctx_getter", lambda: "here's current contexts"
-                ),
                 mp.setattr(
                     oauth_util,
                     "get_social_token",
@@ -525,7 +499,11 @@ class TestAuthFail:
                         )
                     ),
                 ),
-                q = fastapi_auth._SocialLoginRequest(code="code", redirect_uri="red_uri_here", provider_type=oauth_util.ProviderTypeEnum.Spotify)
+                q = fastapi_auth._SocialLoginRequest(
+                    code="code",
+                    redirect_uri="red_uri_here",
+                    provider_type=oauth_util.ProviderTypeEnum.Spotify,
+                )
                 with pytest.raises(fastapi_util.LogicError) as err:
                     await fastapi_auth.social_login_api(q=q)
 
@@ -543,19 +521,15 @@ class TestAuthFail:
         expected_error_code: str | None,
         expected_error_message: str | None,
     ) -> None:
-
         def raise_exc():
             raise jwt.ExpiredSignatureError
 
         async with with_app_ctx(app_settings):
             with monkeypatch.context() as mp:
-                mp.setattr(
-                    ctx, "_current_app_ctx_getter", lambda: "here's current contexts"
-                ),
-                mp.setattr(
-                    jwt, "decode", lambda *args, **kwargs: raise_exc()
+                mp.setattr(jwt, "decode", lambda *args, **kwargs: raise_exc())
+                q = fastapi_auth._AuthRefreshApiRequest(
+                    refresh_token="expired_refresh_token"
                 )
-                q = fastapi_auth._AuthRefreshApiRequest(refresh_token="expired_refresh_token")
                 with pytest.raises(fastapi_util.AuthError) as err:
                     await fastapi_auth.refresh_api(q=q)
 
@@ -573,19 +547,15 @@ class TestAuthFail:
         expected_error_code: str | None,
         expected_error_message: str | None,
     ) -> None:
-        
         def raise_exc():
             raise jwt.DecodeError
-        
+
         async with with_app_ctx(app_settings):
             with monkeypatch.context() as mp:
-                mp.setattr(
-                    ctx, "_current_app_ctx_getter", lambda: "here's current contexts"
-                ),
-                mp.setattr(
-                    jwt, "decode", lambda *args, **kwargs: raise_exc()
+                mp.setattr(jwt, "decode", lambda *args, **kwargs: raise_exc())
+                q = fastapi_auth._AuthRefreshApiRequest(
+                    refresh_token="some_refresh_token"
                 )
-                q = fastapi_auth._AuthRefreshApiRequest(refresh_token="some_refresh_token")
                 with pytest.raises(fastapi_util.AuthError) as err:
                     await fastapi_auth.refresh_api(q=q)
 
@@ -606,12 +576,13 @@ class TestAuthFail:
         async with with_app_ctx(app_settings):
             with monkeypatch.context() as mp:
                 mp.setattr(
-                    ctx, "_current_app_ctx_getter", lambda: "here's current contexts"
-                ),
-                mp.setattr(
-                    jwt, "decode", lambda *args, **kwargs: {"user_id": "some_wrong_decoded_user_info"}
+                    jwt,
+                    "decode",
+                    lambda *args, **kwargs: {"user_id": "some_wrong_decoded_user_info"},
                 )
-                q = fastapi_auth._AuthRefreshApiRequest(refresh_token="wrong_refresh_token")
+                q = fastapi_auth._AuthRefreshApiRequest(
+                    refresh_token="wrong_refresh_token"
+                )
                 with pytest.raises(fastapi_util.AuthError) as err:
                     await fastapi_auth.refresh_api(q=q)
 
@@ -631,12 +602,7 @@ class TestAuthFail:
     ) -> None:
         async with with_app_ctx(app_settings):
             with monkeypatch.context() as mp:
-                mp.setattr(
-                    ctx, "_current_app_ctx_getter", lambda: "here's current contexts"
-                ),
-                mp.setattr(
-                    jwt, "decode", lambda *args, **kwargs: {"user_id": 0}
-                )
+                mp.setattr(jwt, "decode", lambda *args, **kwargs: {"user_id": 0})
                 q = fastapi_auth._AuthRefreshApiRequest(refresh_token="refresh_token")
                 with pytest.raises(fastapi_util.AuthError) as err:
                     await fastapi_auth.refresh_api(q=q)
