@@ -8,6 +8,7 @@ import pydantic
 from fastapi import Depends, File, Response, UploadFile
 from PIL import Image
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import undefer
 from sqlalchemy.sql import expression as sql_exp
 
 import app.models.postgres as m
@@ -64,7 +65,7 @@ async def user_get_me_api(
 ) -> _UserGetResponse:
     user: m.User = (
         await AppCtx.current.db.session.execute(
-            sql_exp.select(m.User).where(m.User.id == me_user_id)
+            sql_exp.select(m.User).where(m.User.id == me_user_id).options(undefer("last_profile_image_url"))
         )
     ).scalar_one()
 
@@ -78,7 +79,7 @@ async def user_get_api(
 ) -> _UserGetResponse:
     user: m.User = (
         await AppCtx.current.db.session.execute(
-            sql_exp.select(m.User).where(m.User.id == user_id)
+            sql_exp.select(m.User).where(m.User.id == user_id).options(undefer("last_profile_image_url"))
         )
     ).scalar_one_or_none()
 
@@ -99,7 +100,7 @@ async def user_profile_image_post_api(
     current_dt = datetime.now().isoformat()
     user: m.User = (
         await AppCtx.current.db.session.execute(
-            sql_exp.select(m.User).where(m.User.id == me_user_id)
+            sql_exp.select(m.User).where(m.User.id == me_user_id).options(undefer("last_profile_image_url"))
         )
     ).scalar_one_or_none()
 
@@ -134,8 +135,8 @@ async def user_profile_image_post_api(
     except RuntimeError as ex:
         raise fastapi_uitl.LogicError(
             code="profile_file_upload_error",
-            message=ex.msg,
-            detail={"aws_error": ex.detail},
+            message=str(ex),
+            detail={"aws_error": str(ex)},
         )
     except Exception as ex:
         raise fastapi_uitl.LogicError(
@@ -196,26 +197,23 @@ class _UserSearchResponse(BaseModel):
     class Config:
         orm_mode = True
 
-
 @router.post("/search")
 async def user_search_post_api(
     q: _UserSearchRequest,
-    response: Response,
     me_user_id: int = Depends(user_auth_required),
-) -> List[_UserSearchResponse]:
-    users_query = await AppCtx.current.db.session.query(m.User)
+) ->  List[_UserSearchResponse]:
+    users_query = sql_exp.select(m.User).select_from(m.User)
 
     if q.filter_expr is not None:
-        users_query = users_query.where(
+        users_query = users_query.filter(
             _UserSearchRequestFilterExpr.to_query(
                 q.filter_expr,
                 {
                     "email": m.User.email.ilike,
                     "nickname": m.User.nickname.ilike,
-                },
+                }
             )
         )
-
     sort_by_col = {
         "id": m.User.id,
         "nickname": m.User.nickname,
@@ -228,16 +226,13 @@ async def user_search_post_api(
         "asc": sql_exp.asc,
         "desc": sql_exp.desc,
     }[q.sort_by_order or "asc"]
-
-    users_count = users_query.count()
-    response.headers["x-total"] = str(users_count)
-
+    
     users: list[m.User] = (
         (
             await AppCtx.current.db.session.execute(
                 users_query.order_by(sort_by_order_exp(sort_by_col)).slice(
                     q.offset, q.offset + q.count
-                )
+                ).options(undefer("last_profile_image_url"))
             )
         )
         .scalars()
@@ -245,8 +240,7 @@ async def user_search_post_api(
     )
 
     return [_UserSearchResponse.from_orm(user) for user in users]
-
-
+   
 @router.get("/followers")
 async def user_followers_get_api(
     response: Response,
