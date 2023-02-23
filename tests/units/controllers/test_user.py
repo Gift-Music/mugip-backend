@@ -6,11 +6,11 @@ from httpx import AsyncClient
 from tests.helper import ensure_fresh_env, with_app_ctx, create_async_function
 from tests.mock.user import create_user
 from _pytest.monkeypatch import MonkeyPatch
-from fastapi import Response
 
 from app.settings import AppSettings
 from app.controllers import user as fastapi_user
 from app.utils import remote_file as remote_file_util
+from app.utils import auth
 
 
 class TestUser:
@@ -29,6 +29,12 @@ class TestUser:
                 username="another_username",
                 password="test_password",
                 nickname="another_nickname",
+            )
+            await fastapi_user.follow_post_api(
+                q=fastapi_user._UserFollowPostRequset(target_user_id=2), me_user_id=1
+            )
+            await fastapi_user.follow_post_api(
+                q=fastapi_user._UserFollowPostRequset(target_user_id=1), me_user_id=2
             )
 
     async def test_user_put_me_api(
@@ -95,9 +101,19 @@ class TestUser:
 
         async with with_app_ctx(app_settings):
             with monkeypatch.context() as mp:
-                mp.setattr(remote_file_util, "upload_profile_image", (lambda *arg, **kwargs: "some_aws_s3_url/uploaded_profile_image_name"))
+                mp.setattr(
+                    remote_file_util,
+                    "upload_profile_image",
+                    (
+                        lambda *arg, **kwargs: "some_aws_s3_url/uploaded_profile_image_name"
+                    ),
+                )
 
-                resp = await app_client.post('/user/profile_image', headers=headers, files={"profile_file": (file.name, file)})
+                resp = await app_client.post(
+                    "/user/profile_image",
+                    headers=headers,
+                    files={"profile_file": (file.name, file)},
+                )
 
         assert resp.status_code == 200
 
@@ -109,7 +125,9 @@ class TestUser:
     ) -> None:
         headers = {"Authorization": "Bearer " + user_access_token}
 
-        resp = await app_client.post('/user/search', headers=headers, json={"offset":0, "count":10})
+        resp = await app_client.post(
+            "/user/search", headers=headers, json={"offset": 0, "count": 10}
+        )
 
         assert resp.status_code == 200
         assert resp.json() is not None
@@ -117,16 +135,24 @@ class TestUser:
 
         # filter by nickname
         filter_expr = {"nickname": "another_nickname"}
-        resp = await app_client.post('/user/search', headers=headers, json={"filter_expr": filter_expr, "offset": 0, "count": 10})
+        resp = await app_client.post(
+            "/user/search",
+            headers=headers,
+            json={"filter_expr": filter_expr, "offset": 0, "count": 10},
+        )
 
         assert resp.status_code == 200
         assert resp.json() is not None
         assert len(resp.json()) == 1
-        assert resp.json()[0]['nickname'] == "another_nickname"
+        assert resp.json()[0]["nickname"] == "another_nickname"
 
         # filter by nickname (using ilike)
         filter_expr = {"nickname": "%nick%"}
-        resp = await app_client.post('/user/search', headers=headers, json={"filter_expr": filter_expr, "offset": 0, "count": 10})
+        resp = await app_client.post(
+            "/user/search",
+            headers=headers,
+            json={"filter_expr": filter_expr, "offset": 0, "count": 10},
+        )
 
         assert resp.status_code == 200
         assert resp.json() is not None
@@ -134,23 +160,40 @@ class TestUser:
 
         # filter by email
         filter_expr = {"email": "default_email@example.com"}
-        resp = await app_client.post('/user/search', headers=headers, json={"filter_expr": filter_expr, "offset": 0, "count": 10})
+        resp = await app_client.post(
+            "/user/search",
+            headers=headers,
+            json={"filter_expr": filter_expr, "offset": 0, "count": 10},
+        )
 
         assert resp.status_code == 200
         assert resp.json() is not None
         assert len(resp.json()) == 1
-        assert resp.json()[0]['email'] == "default_email@example.com"
+        assert resp.json()[0]["email"] == "default_email@example.com"
 
         # filter by email (using ilike)
         filter_expr = {"email": "%example%"}
-        resp = await app_client.post('/user/search', headers=headers, json={"filter_expr": filter_expr, "offset": 0, "count": 10})
+        resp = await app_client.post(
+            "/user/search",
+            headers=headers,
+            json={"filter_expr": filter_expr, "offset": 0, "count": 10},
+        )
 
         assert resp.status_code == 200
         assert resp.json() is not None
         assert len(resp.json()) == 2
-        
+
         # changing sort
-        resp = await app_client.post('/user/search', headers=headers, json={"sort_by_key": "nickname", "sort_by_order": "desc", "offset": 0, "count": 10})
+        resp = await app_client.post(
+            "/user/search",
+            headers=headers,
+            json={
+                "sort_by_key": "nickname",
+                "sort_by_order": "desc",
+                "offset": 0,
+                "count": 10,
+            },
+        )
 
         assert resp.status_code == 200
         assert resp.json() is not None
@@ -158,23 +201,32 @@ class TestUser:
 
     async def test_user_followers_get_api(
         self,
+        app_client: AsyncClient,
+        user_access_token: str,
     ) -> None:
-        pass
+        headers = {"Authorization": "Bearer " + user_access_token}
+        resp = await app_client.get(
+            "/user/followers", headers=headers, params={"offset": 0, "count": 10}
+        )
+
+        assert resp.status_code == 200
+        assert resp.json() is not None
+        assert resp.json()[0].get("id") == 2
 
     async def test_user_following_get_api(
         self,
+        app_client: AsyncClient,
+        user_access_token: str,
     ) -> None:
-        pass
+        headers = {"Authorization": "Bearer " + user_access_token}
+        resp = await app_client.get(
+            "/user/followings", headers=headers, params={"offset": 0, "count": 10}
+        )
 
-    async def test_user_follow_post_api(
-        self,
-    ) -> None:
-        pass
+        assert resp.status_code == 200
+        assert resp.json() is not None
+        assert resp.json()[0].get("id") == 2
 
-    async def test_delete_all(
-        self,
-    ) -> None:
-        pass
 
 class TestUserFail:
     pass
