@@ -1,4 +1,5 @@
 import io
+import pytest
 import pytest_asyncio
 
 from PIL import Image
@@ -10,7 +11,7 @@ from _pytest.monkeypatch import MonkeyPatch
 from app.settings import AppSettings
 from app.controllers import user as fastapi_user
 from app.utils import remote_file as remote_file_util
-from app.utils import auth
+from app.utils import fastapi as fastapi_util
 
 
 class TestUser:
@@ -104,7 +105,7 @@ class TestUser:
                 mp.setattr(
                     remote_file_util,
                     "upload_profile_image",
-                    (
+                    create_async_function(
                         lambda *arg, **kwargs: "some_aws_s3_url/uploaded_profile_image_name"
                     ),
                 )
@@ -120,7 +121,6 @@ class TestUser:
     async def test_user_search_post_api(
         self,
         app_client: AsyncClient,
-        app_settings: AppSettings,
         user_access_token: str,
     ) -> None:
         headers = {"Authorization": "Bearer " + user_access_token}
@@ -229,4 +229,211 @@ class TestUser:
 
 
 class TestUserFail:
-    pass
+    @pytest_asyncio.fixture(scope="class", autouse=True)
+    async def _init_env(
+        self,
+        app_settings: AppSettings,
+        app_client: AsyncClient,
+    ) -> None:
+        async with with_app_ctx(app_settings):
+            await ensure_fresh_env()
+            await create_user(app_client)
+
+    @pytest.mark.parametrize(
+        "expected_error_code, expected_error_message",
+        [("not_found_user", "failed to found user by this id")],
+    )
+    async def test_user_get_api_fail_no_user(
+        self,
+        app_client: AsyncClient,
+        expected_error_code: str | None,
+        expected_error_message: str | None,
+        user_access_token: str,
+    ) -> None:
+        headers = {
+            "Authorization": "Bearer " + user_access_token,
+        }
+
+        fail_resp = await app_client.get("/user/0", headers=headers)
+
+        assert (fail_resp.json() or {}).get("detail", {}).get(
+            "code"
+        ) == expected_error_code
+        assert (fail_resp.json() or {}).get("detail", {}).get(
+            "message"
+        ) == expected_error_message
+
+    @pytest.mark.parametrize(
+        "expected_error_code, expected_error_message",
+        [("not_found_user", "failed to found user by this id")],
+    )
+    async def test_user_profile_image_post_api_fail_no_user(
+        self,
+        app_settings: AppSettings,
+        expected_error_code: str | None,
+        expected_error_message: str | None,
+    ) -> None:
+        # Create a temporary image file
+        image = Image.new("RGB", (100, 100), color="red")
+        file = io.BytesIO()
+        image.save(file, format="JPEG")
+        file.name = "test.jpg"
+        file.seek(0)
+
+        async with with_app_ctx(app_settings):
+            with pytest.raises(fastapi_util.LogicError) as err:
+                await fastapi_user.user_profile_image_post_api(
+                    profile_file=(file.name, file), me_user_id=0
+                )
+
+        assert err.value.code == expected_error_code
+        assert err.value.message == expected_error_message
+
+    @pytest.mark.parametrize(
+        "expected_error_code, expected_error_message",
+        [("profile_file_upload_error", "AWS s3 does not response")],
+    )
+    async def test_user_profile_image_post_api_fail_image_upload_err(
+        self,
+        app_client: AsyncClient,
+        expected_error_code: str | None,
+        expected_error_message: str | None,
+        user_access_token: str,
+        app_settings: AppSettings,
+        monkeypatch: MonkeyPatch,
+    ) -> None:
+        headers = {
+            "Authorization": "Bearer " + user_access_token,
+        }
+
+        # Create a temporary image file
+        image = Image.new("RGB", (100, 100), color="red")
+        file = io.BytesIO()
+        image.save(file, format="JPEG")
+        file.name = "test.jpg"
+        file.seek(0)
+
+        async with with_app_ctx(app_settings):
+            with monkeypatch.context() as mp:
+
+                def raise_runtime_error(*args, **kwargs):
+                    raise RuntimeError("AWS s3 does not response")
+
+                mp.setattr(
+                    remote_file_util, "upload_profile_image", raise_runtime_error
+                )
+
+                # Error occurs also when no AWS client id & secret.
+                fail_resp = await app_client.post(
+                    "/user/profile_image",
+                    headers=headers,
+                    files={"profile_file": (file.name, file)},
+                )
+
+        assert (fail_resp.json() or {}).get("detail", {}).get(
+            "code"
+        ) == expected_error_code
+        assert (fail_resp.json() or {}).get("detail", {}).get(
+            "message"
+        ) == expected_error_message
+
+    @pytest.mark.parametrize(
+        "expected_error_code, expected_error_message",
+        [("cannot_open_profile", "you cannot open profile image")],
+    )
+    async def test_user_profile_image_post_api_fail_open_profile_err(
+        self,
+        app_client: AsyncClient,
+        expected_error_code: str | None,
+        expected_error_message: str | None,
+        user_access_token: str,
+        app_settings: AppSettings,
+        monkeypatch: MonkeyPatch,
+    ) -> None:
+        headers = {
+            "Authorization": "Bearer " + user_access_token,
+        }
+
+        # Create a temporary image file
+        image = Image.new("RGB", (100, 100), color="red")
+        file = io.BytesIO()
+        image.save(file, format="JPEG")
+        file.name = "test.jpg"
+        file.seek(0)
+
+        async with with_app_ctx(app_settings):
+            with monkeypatch.context() as mp:
+
+                def raise_error(*args, **kwargs):
+                    raise Exception("Some Exception occurs.")
+
+                mp.setattr(remote_file_util, "upload_profile_image", raise_error)
+
+                # Error occurs also when no AWS client id & secret.
+                fail_resp = await app_client.post(
+                    "/user/profile_image",
+                    headers=headers,
+                    files={"profile_file": (file.name, file)},
+                )
+
+        assert (fail_resp.json() or {}).get("detail", {}).get(
+            "code"
+        ) == expected_error_code
+        assert (fail_resp.json() or {}).get("detail", {}).get(
+            "message"
+        ) == expected_error_message
+
+    @pytest.mark.parametrize(
+        "expected_error_code, expected_error_message",
+        [("filter_expr", "value_error")],
+    )
+    async def test_user_search_post_api_fail_invalid_filter_expr(
+        self,
+        app_client: AsyncClient,
+        expected_error_code: str | None,
+        expected_error_message: str | None,
+        user_access_token: str,
+    ) -> None:
+        headers = {
+            "Authorization": "Bearer " + user_access_token,
+        }
+        filter_expr = {"wrong_expr": "wrong_filter_value"}
+        fail_resp = await app_client.post(
+            "/user/search",
+            headers=headers,
+            json={"filter_expr": filter_expr, "offset": 0, "count": 10},
+        )
+
+        assert (fail_resp.json() or {}).get("detail", {})[0].get("loc")[
+            1
+        ] == expected_error_code
+        assert (fail_resp.json() or {}).get("detail", {})[0].get(
+            "type"
+        ) == expected_error_message
+
+    @pytest.mark.parametrize(
+        "expected_error_code, expected_error_message",
+        [("not_found_user", "failed to found user by this id")],
+    )
+    async def test_follow_post_api_fail_no_user(
+        self,
+        app_client: AsyncClient,
+        expected_error_code: str | None,
+        expected_error_message: str | None,
+        user_access_token: str,
+    ) -> None:
+        headers = {
+            "Authorization": "Bearer " + user_access_token,
+        }
+        fail_resp = await app_client.post(
+            "/user/follow",
+            headers=headers,
+            json={"target_user_id": 0},
+        )
+
+        assert (fail_resp.json() or {}).get("detail", {}).get(
+            "code"
+        ) == expected_error_code
+        assert (fail_resp.json() or {}).get("detail", {}).get(
+            "message"
+        ) == expected_error_message

@@ -133,9 +133,9 @@ async def user_profile_image_post_api(
             f.seek(0)
 
             file_name = f"{me_user_id}_{current_dt}_{profile_file.filename}"
-            profile_image_url = remote_file_util.upload_profile_image(
-                file_name,
-                f,
+            profile_image_url = await remote_file_util.upload_profile_image(
+                file_name=file_name,
+                file_obj=f,
             )
 
     except RuntimeError as ex:

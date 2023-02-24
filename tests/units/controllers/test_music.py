@@ -12,7 +12,6 @@ from httpx import AsyncClient
 from _pytest.monkeypatch import MonkeyPatch
 
 from app.settings import AppSettings
-from app.utils import auth as auth_util
 from app.utils import spotify as spotify_util
 from app.utils import fastapi as fastapi_util
 from app.controllers import music as fastapi_music
