@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Literal, Optional
 
 import jsonschema
-from fastapi import Depends, Response
+from fastapi import Depends
 from pydantic import BaseModel, Field, validator
 from sqlalchemy.sql import expression as sql_exp
 
@@ -87,13 +87,12 @@ class _TagSearchResponse(BaseModel):
 @router.post("/search")
 async def tag_search_api(
     q: _TagSearchRequest,
-    response: Response,
     _: int = Depends(user_auth_required),
 ) -> List[_TagSearchResponse]:
-    tags_query: m.Tag = await AppCtx.current.db.session.execute(sql_exp.select(m.Tag))
+    tags_query: m.Tag = sql_exp.select(m.Tag).select_from(m.Tag)
 
     if q.filter_expr is not None:
-        tags_query = tags_query.where(
+        tags_query = tags_query.filter(
             _TagSearchRequestFilterExpr.to_query(
                 q.filter_expr,
                 {
@@ -106,15 +105,12 @@ async def tag_search_api(
         "name": m.Tag.name,
         "created": m.Tag.created,
         "updated": m.Tag.updated,
-    }[q.sort_by_key or "id"]
+    }[q.sort_by_key or "name"]
 
     sort_by_order_exp = {
         "asc": sql_exp.asc,
         "desc": sql_exp.desc,
     }[q.sort_by_order or "asc"]
-
-    tags_count = tags_query.count()
-    response.headers["x-total"] = str(tags_count)
 
     tags: list[m.Tag] = (
         (
@@ -124,7 +120,7 @@ async def tag_search_api(
                 )
             )
         )
-        .scalar()
+        .scalars()
         .all()
     )
 
