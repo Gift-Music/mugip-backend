@@ -40,10 +40,10 @@ class SpotifyUtilError(Exception):
 
 
 class SpotifyApiHandler:
-    _default_token: str | None = None
-    _default_token_expired_dt: datetime.datetime = datetime.datetime.fromtimestamp(
-        0.0, tz=TZ_UTC
-    )
+    def __init__(self) -> None:
+        self._default_token: str | None = None
+        self._default_token_expired_dt: datetime.datetime = datetime.datetime.fromtimestamp(
+        0.0, tz=TZ_UTC)
 
     @cached_property
     async def client_credentials(self) -> str:

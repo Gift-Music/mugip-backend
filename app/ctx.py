@@ -11,9 +11,11 @@ from mypy_boto3_s3 import S3Client
 from redis.asyncio import ConnectionPool as RedisConnectionPool
 from redis.asyncio import Redis
 
+
 if TYPE_CHECKING:
     from .settings import AppSettings
     from .utils.rdb import RdbConn
+    from .utils.spotify import SpotifyApiHandler
 
 
 logger = logging.getLogger(__name__)
@@ -35,12 +37,14 @@ class AppCtx(NamedTuple):
     db: RdbConn
     redis: Redis
     s3: S3Client
+    spotify_client: SpotifyApiHandler
 
     id: str | None = None
 
 
 async def create_app_ctx(app_settings: AppSettings) -> AppCtx:
     from .utils.rdb import RdbConn
+    from .utils.spotify import SpotifyApiHandler
 
     socket_keepalive_options = {
         int(k): v
@@ -65,6 +69,7 @@ async def create_app_ctx(app_settings: AppSettings) -> AppCtx:
             aws_access_key_id=app_settings.AWS_ACCESS_KEY_ID,
             aws_secret_access_key=app_settings.AWS_SECRET_ACCESS_KEY,
         ),
+        spotify_client=SpotifyApiHandler()
     )
 
 

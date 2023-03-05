@@ -19,13 +19,11 @@ class TestUser:
     async def _init_env(
         self,
         app_settings: AppSettings,
-        app_client: AsyncClient,
     ) -> None:
         async with with_app_ctx(app_settings):
             await ensure_fresh_env()
-            await create_user(app_client)
+            await create_user()
             await create_user(
-                app_client=app_client,
                 email="another_user@example.com",
                 username="another_username",
                 password="test_password",
@@ -237,7 +235,7 @@ class TestUserFail:
     ) -> None:
         async with with_app_ctx(app_settings):
             await ensure_fresh_env()
-            await create_user(app_client)
+            await create_user()
 
     @pytest.mark.parametrize(
         "expected_error_code, expected_error_message",

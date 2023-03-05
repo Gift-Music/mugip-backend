@@ -4,11 +4,14 @@ import datetime
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import jsonschema
-from fastapi import Depends, Response
+from fastapi import Depends
 from geoalchemy2 import WKTElement
 from pydantic import BaseModel, Field, validator
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.orm import contains_eager, joinedload
+from sqlalchemy.orm import (
+    contains_eager,
+    joinedload,
+)
 from sqlalchemy.sql import expression as sql_exp
 from sqlalchemy.sql import func as sql_func
 
@@ -16,7 +19,6 @@ from app.constants import DEFAULT_SRID
 from app.ctx import AppCtx
 from app.models import postgres as m
 from app.utils import fastapi as fastapi_util
-from app.utils import spotify as spotify_util
 from app.utils.auth import user_auth_required
 from app.utils.filter_expr import build_filter_expr
 
@@ -41,18 +43,22 @@ async def digging_log_post_api(
     ).scalar_one_or_none()
 
     if track is None:
-        track_obj = await spotify_util.get_track(q.track_id)
+        track_obj = await AppCtx.current.spotify_client.get_track(track_id=q.track_id)
         album: m.Album = (
             await AppCtx.current.db.session.execute(
                 sql_exp.select(m.Album).where(m.Album.id == track_obj.album.id)
             )
         ).scalar_one_or_none()
 
+        release_date = datetime.datetime.strptime(
+            track_obj.album.release_date, "%Y-%M-%d"
+        )
+
         if album is None:
             album = m.Album(
                 id=track_obj.album.id,
                 name=track_obj.album.name,
-                release_date=track_obj.album.release_date,
+                release_date=release_date,
                 total_tracks=track_obj.album.total_tracks,
             )
 
@@ -67,7 +73,7 @@ async def digging_log_post_api(
         ]
 
         AppCtx.current.db.session.add(album)
-        await AppCtx.current.db.session.add_all(images)
+        AppCtx.current.db.session.add_all(images)
 
         await AppCtx.current.db.session.execute(
             pg_insert(m.Artist.__table__)
@@ -97,7 +103,7 @@ async def digging_log_post_api(
             for artist in track_obj.artists
         ]
         AppCtx.current.db.session.add(track)
-        await AppCtx.current.db.session.add_all(artist_tracks)
+        AppCtx.current.db.session.add_all(artist_tracks)
 
     tag: m.Tag = (
         await AppCtx.current.db.session.execute(
@@ -239,11 +245,10 @@ _DiggingLogSearchResponse.Track.update_forward_refs()
 _DiggingLogSearchResponse.Album.update_forward_refs()
 _DiggingLogSearchResponse.Artist.update_forward_refs()
 
-
+# TODO: need improvements at controllers/digging_log.py's searching query (should resolve MissingGreenlet err)
 @router.post("/search")
 async def digging_log_search_api(
     q: _DiggingLogSearchRequest,
-    response: Response,
     me_user_id: int = Depends(user_auth_required),
 ) -> List[_DiggingLogSearchResponse]:
     digging_logs_query = (
@@ -270,17 +275,12 @@ async def digging_log_search_api(
     sort_by_col = {
         "created": m.Tag.created,
         "updated": m.Tag.updated,
-    }[q.sort_by_key or "id"]
+    }[q.sort_by_key or "updated"]
 
     sort_by_order_exp = {
         "asc": sql_exp.asc,
         "desc": sql_exp.desc,
     }[q.sort_by_order or "asc"]
-
-    digging_logs_count = await AppCtx.current.db.session.scalar(
-        sql_func.count(digging_logs_query)
-    )
-    response.headers["x-total"] = str(digging_logs_count)
 
     digging_logs: list[m.DiggingLog] = (
         (
@@ -291,6 +291,7 @@ async def digging_log_search_api(
             )
         )
         .scalars()
+        .unique()
         .all()
     )
 

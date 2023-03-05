@@ -6,8 +6,8 @@ from pydantic import BaseModel
 
 from app.models.services.music import Artist, Track
 from app.utils import fastapi as fastapi_util
-from app.utils import spotify as spotify_util
 from app.utils.auth import user_auth_required
+
 
 router = fastapi_util.CustomAPIRouter(prefix="/music", tags=["music"])
 
@@ -34,7 +34,6 @@ async def music_track_search_api(
     me_user_id: int = Depends(user_auth_required),
 ) -> _MusicSearchResponse:
     async with httpx.AsyncClient() as client:
-        spfy_handler = spotify_util.SpotifyApiHandler()
         response = await client.get(
             f"{SPOTIFY_URL}/search",
             params={
@@ -46,7 +45,7 @@ async def music_track_search_api(
             },
             headers={
                 **DEFAULT_HEADER,
-                "Authorization": f"Bearer {await spfy_handler.client_credentials}",
+                "Authorization": f"Bearer {spotify_access_token}",
             },
         )
 

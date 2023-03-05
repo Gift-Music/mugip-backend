@@ -11,7 +11,6 @@ from fastapi.security import OAuth2PasswordRequestForm
 from app.utils import oauth as oauth_util
 from app.utils import fastapi as fastapi_util
 from app.models import postgres as m
-from app import ctx
 from app.ctx import AppCtx
 from app.controllers import auth as fastapi_auth
 from tests.mock.user import create_user, create_social_user
@@ -19,7 +18,10 @@ from tests.mock.user import create_user, create_social_user
 
 class TestAuth:
     @pytest_asyncio.fixture(scope="class", autouse=True)
-    async def _init_env(self, app_settings: AppSettings) -> None:
+    async def _init_env(
+        self,
+        app_settings: AppSettings,
+    ) -> None:
         async with with_app_ctx(app_settings):
             await ensure_fresh_env()
 
@@ -27,13 +29,17 @@ class TestAuth:
         self,
         app_client: AsyncClient,
     ) -> None:
-        resp = await create_user(
-            app_client=app_client,
-            username="test",
-            nickname="test",
-            password="test_password",
-            email="test@example.com",
+        resp = await app_client.post(
+            "/auth/signup",
+            json={
+                "username": "test",
+                "nickname": "test",
+                "password": "test_password",
+                "email": "test@example.com",
+                "is_agreed": True,
+            },
         )
+
         assert resp.status_code == 200
 
     async def test_auth_login_api(
@@ -55,9 +61,12 @@ class TestAuth:
 
     async def test_auth_oauth_login_api(
         self,
+        app_settings: AppSettings,
         app_client: AsyncClient,
     ) -> None:
-        await create_user(app_client=app_client)
+        async with with_app_ctx(app_settings):
+            await create_user()
+
         resp = await app_client.post(
             "/auth/login/oauth",
             data={
@@ -132,9 +141,8 @@ class TestAuth:
         social_access_token: str | None,
         social_refresh_token: str | None,
     ) -> None:
-        async with with_app_ctx(app_settings) as current_ctx:
+        async with with_app_ctx(app_settings):
             await create_social_user(
-                app_ctx=current_ctx,
                 email="new_social_user@example.com",
                 display_name="new_social_user_name",
             )
@@ -214,7 +222,10 @@ class TestAuth:
 
 class TestAuthFail:
     @pytest_asyncio.fixture(scope="class", autouse=True)
-    async def _init_env(self, app_settings: AppSettings) -> None:
+    async def _init_env(
+        self,
+        app_settings: AppSettings,
+    ) -> None:
         async with with_app_ctx(app_settings):
             await ensure_fresh_env()
 
@@ -224,19 +235,18 @@ class TestAuthFail:
     )
     async def test_auth_signup_api_fail_already_registered(
         self,
-        app_client: AsyncClient,
         app_settings: AppSettings,
         expected_error_code: str | None,
         expected_error_message: str | None,
     ) -> None:
-        await create_user(
-            app_client=app_client,
-            username="test",
-            password="test_password",
-            nickname="test",
-            email="test@example.com",
-        )
         async with with_app_ctx(app_settings):
+            await create_user(
+                username="test",
+                password="test_password",
+                nickname="test",
+                email="test@example.com",
+            )
+
             request_query = fastapi_auth._SignUpRequest(
                 email="test@example.com",
                 username="test",
@@ -449,7 +459,6 @@ class TestAuthFail:
 
     async def test_auth_social_signin_api_fail(
         self,
-        monkeypatch: MonkeyPatch,
         app_settings: AppSettings,
     ) -> None:
         async with with_app_ctx(app_settings):

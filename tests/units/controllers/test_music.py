@@ -12,41 +12,39 @@ from httpx import AsyncClient
 from _pytest.monkeypatch import MonkeyPatch
 
 from app.settings import AppSettings
-from app.utils import spotify as spotify_util
 from app.utils import fastapi as fastapi_util
 from app.controllers import music as fastapi_music
 
 
 class TestMusic:
-    spfy_handler = spotify_util.SpotifyApiHandler()
-
     @pytest_asyncio.fixture(scope="class", autouse=True)
     async def _init_env(
-        self, app_settings: AppSettings, app_client: AsyncClient
-    ) -> None:
-        async with with_app_ctx(app_settings):
-            await ensure_fresh_env()
-            await create_user(app_client)
-
-    @pytest_asyncio.fixture(scope="class")
-    async def spotify_access_token(
         self,
         app_settings: AppSettings,
-    ) -> str:
-        async with with_app_ctx(app_settings):
-            spotify_access_token = await self.spfy_handler.client_credentials
-
-            return spotify_access_token
+    ) -> None:
+        async with with_app_ctx(app_settings) as current_ctx:
+            await ensure_fresh_env()
+            await create_user()
+            self.spotify_access_token = await current_ctx.current.spotify_client.client_credentials
+    
+    @pytest_asyncio.fixture(scope="class")
+    async def spotify_access_token(self):
+        return self.spotify_access_token
 
     async def test_music_track_search_api(
         self,
         app_client: AsyncClient,
         user_access_token: str,
+        spotify_access_token: str,
     ) -> None:
+        headers = {
+            "Authorization": "Bearer " + user_access_token,
+            "spotify_access_token": spotify_access_token,
+        }
         resp = await app_client.get(
             "/music/track",
             params={"q": "abcdefu"},
-            headers={"Authorization": "Bearer " + user_access_token},
+            headers=headers,
         )
 
         assert resp.status_code == 200
@@ -90,11 +88,12 @@ class TestMusic:
 class TestMusicFail:
     @pytest_asyncio.fixture(scope="class", autouse=True)
     async def _init_env(
-        self, app_settings: AppSettings, app_client: AsyncClient
+        self,
+        app_settings: AppSettings,
     ) -> None:
         async with with_app_ctx(app_settings):
             await ensure_fresh_env()
-            await create_user(app_client)
+            await create_user()
 
     @pytest.mark.parametrize(
         "expected_error_code, expected_error_message",

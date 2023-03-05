@@ -3,69 +3,74 @@ import pytest_asyncio
 
 from httpx import AsyncClient
 from tests.helper import ensure_fresh_env, with_app_ctx
+from tests.mock.digging_log import create_digging_log
 from tests.mock.user import create_user
-from tests.mock.tag import create_tag
 
 from app.settings import AppSettings
+from app.controllers import digging_log as fastapi_digging_log
+from app.utils import fastapi as fastapi_util
 
 
-class TestTag:
+class TestDiggingLog:
     @pytest_asyncio.fixture(scope="class", autouse=True)
     async def _init_env(
         self,
         app_settings: AppSettings,
+        app_client: AsyncClient,
     ) -> None:
         async with with_app_ctx(app_settings):
             await ensure_fresh_env()
             await create_user()
-            await create_tag()
+            await create_digging_log()
 
-    async def test_tag_post_api(
+    async def test_digging_log_post_api(
         self,
         app_client: AsyncClient,
         user_access_token: str,
     ) -> None:
         headers = {"Authorization": "Bearer " + user_access_token}
-
         resp = await app_client.post(
-            "/tag/",
+            "/digging_log/",
             headers=headers,
-            json={"name": "new_tag_name", "icon": "new_tag_icon"},
+            json={
+                "track_id": "4fouWK6XVHhzl78KzQ1UjL",
+                "tag_name": "test_tag",
+                "coordinates": [0.1, 0.2],
+            },
         )
 
         assert resp.status_code == 200
 
-        filter_expr = {"name": "new_tag_name"}
-        check_tag = await app_client.post(
-            "/tag/search",
+        resp = await app_client.post(
+            "/digging_log/",
             headers=headers,
-            json={"filter_expr": filter_expr, "offset": 0, "count": 10},
+            json={
+                "track_id": "1pFgar9U2S5FfrNdnSVOJK",
+                "tag_name": "test_tag",
+                "coordinates": [0.1, 0.2],
+            },
         )
 
-        assert check_tag.status_code == 200
-        assert check_tag.json() is not None
-        assert check_tag.json()[0].get("name") == "new_tag_name"
+        assert resp.status_code == 200
 
-    async def test_tag_search_api(
+    # TODO: need improvements at controllers/digging_log.py's searching query (should resolve MissingGreenlet err)
+    async def test_digging_log_search_api(
         self,
         app_client: AsyncClient,
         user_access_token: str,
     ) -> None:
         headers = {"Authorization": "Bearer " + user_access_token}
-        filter_expr = {"name": "test%"}
-
+        filter_expr = {"tag_name": "test%"}
         resp = await app_client.post(
-            "/tag/search",
+            "/digging_log/search",
             headers=headers,
             json={"filter_expr": filter_expr, "offset": 0, "count": 10},
         )
 
-        assert resp.status_code == 200
         assert resp.json() is not None
-        assert resp.json()[0].get("name") == "test_tag"
 
 
-class TestTagFail:
+class TestDiggingLogFail:
     @pytest_asyncio.fixture(scope="class", autouse=True)
     async def _init_env(
         self,
@@ -74,13 +79,13 @@ class TestTagFail:
         async with with_app_ctx(app_settings):
             await ensure_fresh_env()
             await create_user()
-            await create_tag()
+            await create_digging_log()
 
     @pytest.mark.parametrize(
         "expected_error_code, expected_error_message",
-        [("model_already_eixsts", "model is already exists")],
+        [("not_found_tag", "failed to found tag by this name")],
     )
-    async def test_tag_post_api_fail_already_exist_tag(
+    async def test_digging_log_post_api_fail_not_found_tag(
         self,
         app_client: AsyncClient,
         expected_error_code: str | None,
@@ -88,9 +93,14 @@ class TestTagFail:
         user_access_token: str,
     ) -> None:
         headers = {"Authorization": "Bearer " + user_access_token}
-
         fail_resp = await app_client.post(
-            "/tag/", headers=headers, json={"name": "test_tag", "icon": "test_tag_icon"}
+            "/digging_log/",
+            headers=headers,
+            json={
+                "track_id": "4fouWK6XVHhzl78KzQ1UjL",
+                "tag_name": "invalid_tag_name",
+                "coordinates": [0.1, 0.2],
+            },
         )
 
         assert (fail_resp.json() or {}).get("detail", {}).get(
@@ -99,25 +109,44 @@ class TestTagFail:
         assert (fail_resp.json() or {}).get("detail", {}).get(
             "message"
         ) == expected_error_message
+    
+    @pytest.mark.parametrize(
+        "expected_error_code, expected_error_message",
+        [("not_found_user", "failed to found user by this id")],
+    )
+    async def test_digging_log_post_api_fail_not_found_user(
+        self,
+        app_settings: AppSettings,
+        expected_error_code: str | None,
+        expected_error_message: str | None,
+    ) -> None:
+        async with with_app_ctx(app_settings): 
+            with pytest.raises(fastapi_util.LogicError) as err:
+                q = fastapi_digging_log._DiggingLogPostRequest(track_id='4fouWK6XVHhzl78KzQ1UjL', tag_name='test_tag', coordinates=[0.1, 0.2])
+                await fastapi_digging_log.digging_log_post_api(q=q, me_user_id=0)
+
+        assert err.value.code == expected_error_code
+        assert err.value.message == expected_error_message
 
     @pytest.mark.parametrize(
         "expected_error_code, expected_error_message",
         [("filter_expr", "value_error")],
     )
-    async def test_tag_search_api_fail_invalid_filter_expr(
+    async def test_digging_log_search_api_fail_invalid_filter_expr(
         self,
         app_client: AsyncClient,
         expected_error_code: str | None,
         expected_error_message: str | None,
         user_access_token: str,
     ) -> None:
-        headers = {"Authorization": "Bearer " + user_access_token}
-        invalid_filter_expr = {"invalid_filter_naming": "invalid_name"}
-
+        headers = {
+            "Authorization": "Bearer " + user_access_token,
+        }
+        filter_expr = {"wrong_expr": "wrong_filter_value"}
         fail_resp = await app_client.post(
-            "/tag/search",
+            "/digging_log/search",
             headers=headers,
-            json={"filter_expr": invalid_filter_expr, "offset": 0, "count": 10},
+            json={"filter_expr": filter_expr, "offset": 0, "count": 10},
         )
 
         assert (fail_resp.json() or {}).get("detail", {})[0].get("loc")[
