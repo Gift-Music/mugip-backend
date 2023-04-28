@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import (
     contains_eager,
     joinedload,
+    undefer,
 )
 from sqlalchemy.sql import expression as sql_exp
 from sqlalchemy.sql import func as sql_func
@@ -254,9 +255,12 @@ async def digging_log_search_api(
     digging_logs_query = (
         sql_exp.select(m.DiggingLog)
         .join(m.DiggingLog.digging_log_tags)
+        .join(m.DiggingLog.user)
+        .join(m.DiggingLog.track)
         .options(
             contains_eager(m.DiggingLog.digging_log_tags),
-            joinedload(m.DiggingLog.track),
+            contains_eager(m.DiggingLog.user).options(undefer("last_profile_image_url")),
+            contains_eager(m.DiggingLog.track).options(joinedload(m.Track.album).options(joinedload(m.Album.images)), undefer("artists")),
         )
     )
 
