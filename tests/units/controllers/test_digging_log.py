@@ -53,7 +53,6 @@ class TestDiggingLog:
 
         assert resp.status_code == 200
 
-    # TODO: need improvements at controllers/digging_log.py's searching query (should resolve MissingGreenlet err)
     async def test_digging_log_search_api(
         self,
         app_client: AsyncClient,
@@ -67,7 +66,23 @@ class TestDiggingLog:
             json={"filter_expr": filter_expr, "offset": 0, "count": 10},
         )
 
+        assert resp.status_code == 200
         assert resp.json() is not None
+
+        # album
+        assert (resp.json() or {})[0].get("track", {}).get("album", {}).get("name", {}) == "abcdefu"
+
+        # image
+        assert (resp.json() or {})[0].get("track", {}).get("album", {}).get("images", {}) is not None
+
+        # artist
+        assert (resp.json() or {})[0].get("track", {}).get("artists", {})[0].get("name", {}) == "GAYLE"
+
+        # user
+        assert (resp.json() or {})[0].get("user", {}).get("nickname", {}) == "nickname"
+
+        # tag
+        assert (resp.json() or {})[0].get("tags", {})[0].get("name", {}) == "test_tag"
 
 
 class TestDiggingLogFail:
